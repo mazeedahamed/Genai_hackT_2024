@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evaluation Workbench</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+
+    <div class="container">
+        <!-- Section: User Input & Expectation -->
+        <div class="section">
+            <h3>User Input & Expectation</h3>
+            <div class="input-box">
+                <label for="user-input">Input:</label>
+                <input type="text" id="user-input" placeholder="Example" style="width: 100%;">
+            </div>
+        </div>
+
+        <!-- Section: Evaluation Workbench -->
+        <div class="section">
+            <h3>Evaluation Workbench</h3>
+        </div>
+
+        <!-- Section: Recommended Prompts -->
+        <div class="section">
+            <h3>Recommended Prompts</h3>
+            <div class="radio-group">
+                <label>Select Prompt for Evaluation:</label><br>
+                <input type="radio" id="prompt1" name="prompt" value="1">
+                <label for="prompt1">1</label><br>
+                <input type="radio" id="prompt2" name="prompt" value="2">
+                <label for="prompt2">2</label><br>
+                <input type="radio" id="prompt3" name="prompt" value="3">
+                <label for="prompt3">3</label>
+            </div>
+            <div>
+                <label>Results:</label><br>
+                <input type="radio" id="poor" name="results" value="poor">
+                <label for="poor">Poor</label><br>
+                <input type="radio" id="good" name="results" value="good">
+                <label for="good">Good</label><br>
+                <input type="radio" id="excellent" name="results" value="excellent">
+                <label for="excellent">Excellent</label>
+            </div>
+        </div>
+
+        <!-- Section: Evaluation Techniques -->
+        <div class="section">
+            <h3>Evaluation Techniques</h3>
+        </div>
+
+        <!-- Section: Ground Truth Based Evaluation -->
+        <div class="section">
+            <h3>Ground Truth Based Evaluation</h3>
+            <div class="table-box">
+                <table>
+                    <tr>
+                        <th>Recommended Sample Size</th>
+                        <th>Proportion of Partitions</th>
+                    </tr>
+                    <tr>
+                        <td>Sample Size Data</td>
+                        <td>Partition Info</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- Section: LLM Assisted Evaluation -->
+        <div class="section">
+            <h3>LLM Assisted Evaluation</h3>
+            <div class="table-box">
+                <table>
+                    <tr>
+                        <th>Completeness</th>
+                        <th>Fluency</th>
+                        <th>Truthfulness</th>
+                    </tr>
+                    <tr>
+                        <td>Completeness Data</td>
+                        <td>Fluency Data</td>
+                        <td>Truthfulness Data</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- Section: Accuracy -->
+        <div class="section">
+            <h3>Accuracy</h3>
+            <div class="table-box">
+                <table>
+                    <tr>
+                        <th>Accuracy</th>
+                        <th>Descriptive Stats</th>
+                    </tr>
+                    <tr>
+                        <td>Accuracy Data</td>
+                        <td>
+                            BLEU, ROUGE, F1, etc.<br>
+                            Standard Deviation<br>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
