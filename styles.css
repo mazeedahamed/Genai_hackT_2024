@@ -1,0 +1,41 @@
+body {
+    font-family: Arial, sans-serif;
+}
+
+.container {
+    width: 90%;
+    margin: 20px auto;
+    border: 1px solid black;
+    padding: 10px;
+}
+
+.section {
+    border: 1px solid black;
+    margin-bottom: 10px;
+    padding: 10px;
+}
+
+.input-box {
+    margin: 10px 0;
+}
+
+.radio-group {
+    margin: 10px 0;
+}
+
+.table-box {
+    border: 1px solid black;
+    padding: 10px;
+    margin: 10px 0;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    border: 1px solid black;
+    padding: 8px;
+    text-align: left;
+}
