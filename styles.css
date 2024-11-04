@@ -39,3 +39,34 @@ th, td {
     padding: 8px;
     text-align: left;
 }
+
+
+
+
+from datasets import load_dataset
+
+# Load the English-French dataset test split from OPUS100
+dataset = load_dataset("opus100", "ar-fr", split="test")
+
+# Get 10 random samples for testing
+samples = dataset.shuffle(seed=42).select(range(10))
+test_data = [{"English": sample["translation"]["ar"], "French": sample["translation"]["fr"]} for sample in samples]
+
+# Print the test samples
+for item in test_data:
+    print(item)
+    print("---")
+
+
+# # Load the XSum dataset's test split
+# dataset = load_dataset("xsum", split="validation")
+
+# # Get 10 random samples for testing summarization
+# samples = dataset.shuffle(seed=42).select(range(10))
+# summarization_data = [{"Document": sample["document"], "Summary": sample["summary"]} for sample in samples]
+
+# # Print the summarization test samples
+# for item in summarization_data:
+#     print("Document:", item["Document"])
+#     print("Summary:", item["Summary"])
+#     print("---")
