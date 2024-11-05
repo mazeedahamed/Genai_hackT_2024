@@ -43,83 +43,21 @@ th, td {
 
 
 
-from datasets import load_dataset
+import pandas as pd
+import numpy as np
 
-# Load the Opus 100 dataset by specifying the language pair
-# # Example: English to French (en-fr)
-# dataset = load_dataset("helsinki-nlp/opus100", "en-fr")
+# Replace 'path_to_your_file.parquet' with the actual path to your Parquet file
+file_path = 'path_to_your_file.parquet'
+df = pd.read_parquet(file_path)
 
-# # Access the training data
-# train_data = dataset['train']
+# Set a seed for reproducibility
+seed_value = 42
 
-# # Preview a few samples
-# for sample in train_data[:5]:
-#     print(f"Source: {sample['translation']['en']}")
-#     print(f"Target: {sample['translation']['fr']}\n")
+# Shuffle the DataFrame
+shuffled_df = df.sample(frac=1, random_state=seed_value).reset_index(drop=True)
 
+# Select the first 10 rows (or any number you want)
+samples = shuffled_df.head(10)
 
-# try:
-#     dataset = load_dataset("ag_news")  # A common dataset on the Hub
-#     print("Connection to Hugging Face Hub is successful.")
-# except Exception as e:
-#     print("Error connecting to Hugging Face Hub:", e)
-
-
-# try:
-#     # Load a sample dataset to test
-#     sample_dataset = load_dataset("squad", split="train[:1%]")  # Load only 1% for a quick test
-#     print("Sample dataset loaded successfully!")
-#     print(sample_dataset[0])  # Print the first item to verify
-# except Exception as e:
-#     print("Error loading dataset:", e)
-
-# try:
-#     from datasets import load_dataset
-#     print("Datasets library is successfully installed and imported.")
-# except ImportError as e:
-#     print("Datasets library is not installed:", e)
-
-def verify_datasets():
-    try:
-        # Load Opus100 with a specific language pair, e.g., English-French ("en-fr")
-        opus100 = load_dataset("opus100", "en-fr")  # Change "en-fr" to your target pair if needed
-        print("Opus100 loaded successfully!")
-    except Exception as e:
-        print("Error loading Opus100 dataset:", e)
-        opus100 = None
-
-    try:
-        # Load XSum
-        xsum = load_dataset("xsum")
-        print("XSum loaded successfully!")
-    except Exception as e:
-        print("Error loading XSum dataset:", e)
-        xsum = None
-
-    # Function to display dataset details
-    def display_dataset_info(dataset, name):
-        if dataset is not None:
-            print(f"\n{name} Dataset Info:")
-            print(dataset)  # Shows metadata including splits
-
-            # Display basic information for the training split
-            train_split = dataset['train']
-            print(f"\n{name} Train Split Info:")
-            print(f"Number of samples: {len(train_split)}")
-            print(f"Columns: {train_split.column_names}")
-
-            # Display a sample entry
-            print(f"\nSample from {name}:")
-            print(train_split[0])
-
-            # Display data types of each column in the first sample
-            print(f"\n{name} Sample Data Types:")
-            for key, value in train_split[0].items():
-                print(f"{key}: {type(value)} - {value}")
-
-    # Display information for both datasets
-    display_dataset_info(opus100, "Opus100")
-    display_dataset_info(xsum, "XSum")
-
-# Run the function to verify both datasets
-verify_datasets()
+# Display the sampled data
+print(samples)
