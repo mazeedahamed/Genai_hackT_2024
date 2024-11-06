@@ -1,0 +1,97 @@
+// src/app/app.config.ts
+import { InjectionToken } from '@angular/core';
+import { ChartOptions } from 'chart.js';
+
+// Define a token for injecting chart configurations
+export const CHART_CONFIG = new InjectionToken<ChartOptions>('chart.config');
+
+// Set default chart options
+export const defaultChartOptions: ChartOptions = {
+  responsive: true,
+  plugins: {
+    legend: {
+      position: 'top',
+    },
+  },
+  scales: {
+    x: {
+      display: true,
+      title: {
+        display: true,
+        text: 'Months'
+      }
+    },
+    y: {
+      display: true,
+      title: {
+        display: true,
+        text: 'Values'
+      }
+    }
+  }
+};
+
+// src/main.ts
+import { bootstrapApplication } from '@angular/platform-browser';
+import { AppComponent } from './app/app.component';
+import { CHART_CONFIG, defaultChartOptions } from './app/app.config';
+
+bootstrapApplication(AppComponent, {
+  providers: [
+    { provide: CHART_CONFIG, useValue: defaultChartOptions },
+    // other global providers if needed
+  ]
+}).catch(err => console.error(err));
+
+
+ng generate component line-chart --standalone
+
+
+// src/app/line-chart/line-chart.component.ts
+import { Component, Inject } from '@angular/core';
+import { ChartModule } from 'ng2-charts';
+import { CHART_CONFIG } from '../app.config';
+import { ChartOptions, ChartDataset, ChartType } from 'chart.js';
+
+@Component({
+  selector: 'app-line-chart',
+  standalone: true,
+  imports: [ChartModule],
+  templateUrl: './line-chart.component.html',
+  styleUrls: ['./line-chart.component.css']
+})
+export class LineChartComponent {
+  public lineChartData: ChartDataset[] = [
+    { label: 'Series 1', data: [65, 59, 80, 81, 56, 55, 40], fill: false, tension: 0.1, borderColor: 'blue' }
+  ];
+  public lineChartLabels: string[] = ['January', 'February', 'March', 'April', 'May', 'June', 'July'];
+  public lineChartType: ChartType = 'line';
+
+  // Inject global chart options from CHART_CONFIG
+  constructor(@Inject(CHART_CONFIG) public lineChartOptions: ChartOptions) {}
+}
+
+
+<!-- src/app/line-chart/line-chart.component.html -->
+<div style="display: block;">
+  <canvas baseChart
+          [data]="lineChartData"
+          [labels]="lineChartLabels"
+          [options]="lineChartOptions"
+          [type]="lineChartType">
+  </canvas>
+</div>
+
+
+// src/app/app.component.ts
+import { Component } from '@angular/core';
+import { LineChartComponent } from './line-chart/line-chart.component';
+
+@Component({
+  selector: 'app-root',
+  standalone: true,
+  imports: [LineChartComponent],
+  template: `<app-line-chart></app-line-chart>`,
+  styleUrls: ['./app.component.css']
+})
+export class AppComponent {}
