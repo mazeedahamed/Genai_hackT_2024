@@ -14,7 +14,7 @@ Background: Given the user is on the homepage And the "Subscribe" button is 
 Scenario: Verify the "Subscribe" button visibility Given the user visits the homepage Then the "Subscribe" button should be visible
 Scenario: Verify the "Subscribe" button redirects to the subscription page Given the user clicks the "Subscribe" button Then the user should be redirected to the subscription page
 
-user : We'd like to add 2 Genie fields to the custom highlights panel on the Account Summary page in Agent Desktop.
+user input : We'd like to add 2 Genie fields to the custom highlights panel on the Account Summary page in Agent Desktop.
 As an agent, I want to see if an account is engaged and their tier level on the account summary so that I know the customer's relationship status with the firm.
 
 Acceptance Criteria:
