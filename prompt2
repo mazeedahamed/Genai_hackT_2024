@@ -1,0 +1,28 @@
+Example:
+
+User Input:
+We'd like to add 2 Genie fields to the custom highlights panel on the Account Summary page in Agent Desktop.
+As an agent, I want to see if an account is engaged and their tier level on the account summary so that I know the customer's relationship status with the firm.
+
+Acceptance Criteria:
+
+Field name: Engaged
+The field will show the Platinum User's name if the account is engaged.
+The field will be blank if the account is not engaged.
+Valid Test Cases (to be generated):
+
+Summary: Add "Engaged" field to the Account Summary in Agent Desktop.
+
+Background:
+Given the user is logged into the Agent Desktop
+And the user navigates to the Account Summary page
+
+Scenario: Display Engaged Field for Engaged Account
+Given an agent views an account summary
+When the account is engaged and associated with a Platinum User
+Then the Engaged field should display the Platinum User's name
+
+Scenario: Display Blank Engaged Field for Non-Engaged Account
+Given an agent views an account summary
+When the account is not engaged
+Then the Engaged field should be blank
