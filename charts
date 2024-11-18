@@ -1,21 +1,3 @@
-npm install chart.js
-npm install ng2-charts
-
-
-import { NgModule } from '@angular/core';
-import { BrowserModule } from '@angular/platform-browser';
-import { AppComponent } from './app.component';
-import { ChartModule } from 'ng2-charts';
-
-@NgModule({
-  declarations: [AppComponent],
-  imports: [BrowserModule, ChartModule],
-  providers: [],
-  bootstrap: [AppComponent]
-})
-export class AppModule {}
-
-
 import { Component } from '@angular/core';
 
 @Component({
@@ -52,6 +34,11 @@ export class AppComponent {
 
   public barChartOptions = {
     responsive: true,
+    plugins: {
+      legend: {
+        position: 'top',
+      }
+    },
     scales: {
       x: {
         title: {
@@ -70,15 +57,13 @@ export class AppComponent {
           stepSize: 0.1
         }
       }
-    },
-    plugins: {
-      legend: {
-        position: 'top'
-      }
     }
   };
 }
 
+
+========
+HTML ====
 
 <div style="width: 70%; margin: 0 auto;">
   <canvas baseChart
@@ -89,7 +74,12 @@ export class AppComponent {
 </div>
 
 
+
+======
+css====
+
 div {
   text-align: center;
   margin-top: 20px;
 }
+
