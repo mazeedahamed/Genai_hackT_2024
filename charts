@@ -1,0 +1,95 @@
+npm install chart.js
+npm install ng2-charts
+
+
+import { NgModule } from '@angular/core';
+import { BrowserModule } from '@angular/platform-browser';
+import { AppComponent } from './app.component';
+import { ChartModule } from 'ng2-charts';
+
+@NgModule({
+  declarations: [AppComponent],
+  imports: [BrowserModule, ChartModule],
+  providers: [],
+  bootstrap: [AppComponent]
+})
+export class AppModule {}
+
+
+import { Component } from '@angular/core';
+
+@Component({
+  selector: 'app-root',
+  templateUrl: './app.component.html',
+  styleUrls: ['./app.component.css']
+})
+export class AppComponent {
+  public barChartData = {
+    labels: ['BERTScore', 'BLEU Sentence', 'BLEU Corpus', 'METEOR', 'TER'], // X-axis labels
+    datasets: [
+      {
+        label: 'User Prompt',
+        data: [0.78, 0.67, 0.56, 0.59, 0.67], // Y-axis values
+        backgroundColor: '#4285F4'
+      },
+      {
+        label: 'AI Suggested Prompt 1',
+        data: [0.83, 0.78, 0.66, 0.66, 0.6],
+        backgroundColor: '#34A853'
+      },
+      {
+        label: 'AI Suggested Prompt 2',
+        data: [0.81, 0.75, 0.661, 0.64, 0.6],
+        backgroundColor: '#FBBC04'
+      },
+      {
+        label: 'AI Suggested Prompt 3',
+        data: [0.86, 0.73, 0.64, 0.67, 0.58],
+        backgroundColor: '#EA4335'
+      }
+    ]
+  };
+
+  public barChartOptions = {
+    responsive: true,
+    scales: {
+      x: {
+        title: {
+          display: true,
+          text: 'Metrics'
+        }
+      },
+      y: {
+        title: {
+          display: true,
+          text: 'Scores'
+        },
+        min: 0,
+        max: 1,
+        ticks: {
+          stepSize: 0.1
+        }
+      }
+    },
+    plugins: {
+      legend: {
+        position: 'top'
+      }
+    }
+  };
+}
+
+
+<div style="width: 70%; margin: 0 auto;">
+  <canvas baseChart
+          [data]="barChartData"
+          [options]="barChartOptions"
+          chartType="bar">
+  </canvas>
+</div>
+
+
+div {
+  text-align: center;
+  margin-top: 20px;
+}
