@@ -6,7 +6,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.*;
 import java.util.regex.Pattern;
-import java.util.stream.IntStream;
 
 public class ExcelColumnProcessor {
 
@@ -15,43 +14,53 @@ public class ExcelColumnProcessor {
         String excelFilePath = "input.xlsx";
         String outputFilePath = "output.xlsx";
 
+        // Define patterns to search for
+        List<String> columnPatterns = List.of("common\\|doc\\d+", "share\\|doc\\d+", "will\\|doc\\d+");
+
         try (FileInputStream fis = new FileInputStream(excelFilePath);
              Workbook workbook = new XSSFWorkbook(fis)) {
 
             // Read the first sheet from the Excel file
             Sheet sheet = workbook.getSheetAt(0);
 
-            // Identify columns with headers like "common|doc1", "common|doc2", etc.
+            // Identify relevant columns for each pattern
             Row headerRow = sheet.getRow(0);
             if (headerRow == null) {
                 System.out.println("Header row is missing.");
                 return;
             }
-            List<Integer> relevantColumns = findRelevantColumns(headerRow);
 
-            // Extend headers with "Common ExactMatch" and "Common Missing"
+            // Map pattern to list of column indices
+            Map<String, List<Integer>> patternColumnMap = findRelevantColumns(headerRow, columnPatterns);
+
+            // Extend headers with new columns for each pattern
             int originalColumnCount = headerRow.getLastCellNum();
-            List<String> newHeaders = List.of("Common ExactMatch", "Common Missing");
-            writeHeader(headerRow, newHeaders);
+            Map<String, List<String>> newHeadersMap = createNewHeaders(columnPatterns);
+            writeHeaders(headerRow, newHeadersMap);
 
             // Iterate through all rows starting from the second row (data rows)
             for (int i = 1; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
                 if (row != null) {
-                    // Read only relevant columns
-                    String[] values = readRow(row, relevantColumns);
+                    // Process each pattern separately
+                    int newColumnStart = originalColumnCount;
+                    for (String pattern : columnPatterns) {
+                        List<Integer> relevantColumns = patternColumnMap.getOrDefault(pattern, Collections.emptyList());
+                        String[] values = readRow(row, relevantColumns);
 
-                    // Count ExactMatch and Missing entries
-                    long exactMatchCount = Arrays.stream(values)
-                            .filter(value -> value.startsWith("ExactMatch"))
-                            .count();
+                        // Count ExactMatch and Missing entries
+                        long exactMatchCount = Arrays.stream(values)
+                                .filter(value -> value.startsWith("ExactMatch"))
+                                .count();
 
-                    long missingCount = Arrays.stream(values)
-                            .filter(value -> value.startsWith("Missing"))
-                            .count();
+                        long missingCount = Arrays.stream(values)
+                                .filter(value -> value.startsWith("Missing"))
+                                .count();
 
-                    // Write counts back to the row
-                    writeRow(row, exactMatchCount, missingCount, originalColumnCount);
+                        // Write counts back to the row
+                        writeRow(row, exactMatchCount, missingCount, newColumnStart);
+                        newColumnStart += 2; // Move to the next pair of new columns
+                    }
                 }
             }
 
@@ -67,20 +76,51 @@ public class ExcelColumnProcessor {
         }
     }
 
-    // Helper method to identify relevant columns based on headers like "common|docN"
-    private static List<Integer> findRelevantColumns(Row headerRow) {
-        List<Integer> relevantColumns = new ArrayList<>();
-        Pattern pattern = Pattern.compile("common\\|doc\\d+"); // Regex for "common|docN"
+    // Helper method to identify relevant columns for each pattern
+    private static Map<String, List<Integer>> findRelevantColumns(Row headerRow, List<String> patterns) {
+        Map<String, List<Integer>> patternColumnMap = new HashMap<>();
+        Map<String, Pattern> compiledPatterns = new HashMap<>();
 
+        // Compile patterns for efficiency
+        for (String pattern : patterns) {
+            compiledPatterns.put(pattern, Pattern.compile(pattern));
+        }
+
+        // Check each column header against all patterns
         for (int i = 0; i < headerRow.getLastCellNum(); i++) {
             Cell cell = headerRow.getCell(i, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
             String header = cell.toString();
-            if (pattern.matcher(header).matches()) {
-                relevantColumns.add(i);
+
+            for (String pattern : patterns) {
+                if (compiledPatterns.get(pattern).matcher(header).matches()) {
+                    patternColumnMap.computeIfAbsent(pattern, k -> new ArrayList<>()).add(i);
+                }
             }
         }
 
-        return relevantColumns;
+        return patternColumnMap;
+    }
+
+    // Helper method to create new headers for each pattern
+    private static Map<String, List<String>> createNewHeaders(List<String> patterns) {
+        Map<String, List<String>> newHeadersMap = new HashMap<>();
+        for (String pattern : patterns) {
+            String prefix = pattern.split("\\\\|")[0]; // Extract prefix like "common", "share", etc.
+            List<String> newHeaders = List.of(prefix + " ExactMatch", prefix + " Missing");
+            newHeadersMap.put(pattern, newHeaders);
+        }
+        return newHeadersMap;
+    }
+
+    // Helper method to write the new headers
+    private static void writeHeaders(Row headerRow, Map<String, List<String>> newHeadersMap) {
+        int columnIndex = headerRow.getLastCellNum();
+        for (List<String> newHeaders : newHeadersMap.values()) {
+            for (String newHeader : newHeaders) {
+                Cell cell = headerRow.createCell(columnIndex++, CellType.STRING);
+                cell.setCellValue(newHeader);
+            }
+        }
     }
 
     // Helper method to read values from relevant columns in a row
@@ -94,21 +134,12 @@ public class ExcelColumnProcessor {
         return values;
     }
 
-    // Helper method to write the extended headers
-    private static void writeHeader(Row headerRow, List<String> newHeaders) {
-        int columnCount = headerRow.getLastCellNum();
-        for (int i = 0; i < newHeaders.size(); i++) {
-            Cell cell = headerRow.createCell(columnCount + i, CellType.STRING);
-            cell.setCellValue(newHeaders.get(i));
-        }
-    }
-
-    // Helper method to write the ExactMatch and Missing counts to a row
-    private static void writeRow(Row row, long exactMatchCount, long missingCount, int originalColumnCount) {
-        Cell exactMatchCell = row.createCell(originalColumnCount, CellType.NUMERIC);
+    // Helper method to write counts to the row
+    private static void writeRow(Row row, long exactMatchCount, long missingCount, int columnStart) {
+        Cell exactMatchCell = row.createCell(columnStart, CellType.NUMERIC);
         exactMatchCell.setCellValue(exactMatchCount);
 
-        Cell missingCell = row.createCell(originalColumnCount + 1, CellType.NUMERIC);
+        Cell missingCell = row.createCell(columnStart + 1, CellType.NUMERIC);
         missingCell.setCellValue(missingCount);
     }
 }
