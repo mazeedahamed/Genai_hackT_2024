@@ -1,3 +1,11 @@
+
+
+   row.createCell(newHeaderIndices.get(0), CellType.NUMERIC).setCellValue(exactMatchCount);
+        row.createCell(newHeaderIndices.get(1), CellType.NUMERIC).setCellValue(missingCount);
+    
+
+
+
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
