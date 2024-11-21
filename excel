@@ -159,3 +159,28 @@ public class ExcelColumnProcessor {
         row.createCell(Integer.parseInt(headerPositions.get(0))).setCellValue(exactMatchCount);
         row.createCell(Integer.parseInt(headerPositions.get(1))).setCellValue(missingCount);
     }
+
+private static Map<String, List<Integer>> createNewHeaders(Row headerRow, List<String> patterns) {
+    Map<String, List<Integer>> newHeadersMap = new HashMap<>();
+    int columnIndex = headerRow.getLastCellNum(); // Start after existing headers
+
+    for (String pattern : patterns) {
+        String prefix = pattern.split("\\\\|")[0]; // Extract prefix like "common", "share", etc.
+
+        // Create headers for "ExactMatch" and "Missing" and store their indices
+        List<Integer> newHeaderIndices = new ArrayList<>();
+
+        Cell exactMatchCell = headerRow.createCell(columnIndex++, CellType.STRING);
+        exactMatchCell.setCellValue(prefix + " ExactMatch");
+        newHeaderIndices.add(exactMatchCell.getColumnIndex());
+
+        Cell missingCell = headerRow.createCell(columnIndex++, CellType.STRING);
+        missingCell.setCellValue(prefix + " Missing");
+        newHeaderIndices.add(missingCell.getColumnIndex());
+
+        // Map pattern to its newly created header indices
+        newHeadersMap.put(pattern, newHeaderIndices);
+    }
+
+    return newHeadersMap;
+}
