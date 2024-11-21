@@ -1,3 +1,26 @@
+    // Keep track of indices for the overall columns
+    int overallExactMatchColumn = columnIndex;
+    int overallMissingColumn = columnIndex + 1;
+
+    // Create the overall columns
+    headerRow.createCell(overallExactMatchColumn, CellType.STRING).setCellValue("Overall ExactMatch");
+    headerRow.createCell(overallMissingColumn, CellType.STRING).setCellValue("Overall Missing");
+
+
+
+
+
+  overallExactMatchCount += exactMatchCount;
+        overallMissingCount += missingCount;
+    }
+}
+
+// Write the overall ExactMatch and Missing counts in the new columns
+row.createCell(overallExactMatchColumn, CellType.NUMERIC).setCellValue(overallExactMatchCount);
+row.createCell(overallMissingColumn, CellType.NUMERIC).setCellValue(overallMissingCount);
+
+
+
 
 
    row.createCell(newHeaderIndices.get(0), CellType.NUMERIC).setCellValue(exactMatchCount);
