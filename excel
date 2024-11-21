@@ -143,3 +143,19 @@ public class ExcelColumnProcessor {
         missingCell.setCellValue(missingCount);
     }
 }
+
+
+
+ // Retrieve the new header positions for "ExactMatch" and "Missing" for this pattern
+    List<String> headerPositions = newHeadersMap.get(pattern);
+    
+    // Assuming the header map contains keys like "Common ExactMatch" and "Common Missing"
+    // and corresponding positions as the column indices where the counts should be written.
+
+    // Write counts to the corresponding new columns for the current pattern
+    // headerPositions.get(0) is for ExactMatch count column
+    // headerPositions.get(1) is for Missing count column
+    if (headerPositions != null && headerPositions.size() == 2) {
+        row.createCell(Integer.parseInt(headerPositions.get(0))).setCellValue(exactMatchCount);
+        row.createCell(Integer.parseInt(headerPositions.get(1))).setCellValue(missingCount);
+    }
