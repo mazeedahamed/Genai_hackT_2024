@@ -5,7 +5,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.*;
-import java.util.stream.Collectors;
+import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 
 public class ExcelColumnProcessor {
@@ -21,23 +21,27 @@ public class ExcelColumnProcessor {
             // Read the first sheet from the Excel file
             Sheet sheet = workbook.getSheetAt(0);
 
-            // Read headers and extend them with new columns
+            // Identify columns with headers like "common|doc1", "common|doc2", etc.
             Row headerRow = sheet.getRow(0);
-            List<String> extendedHeader = readHeader(headerRow);
-            extendedHeader.add("Common ExactMatch");
-            extendedHeader.add("Common Missing");
+            if (headerRow == null) {
+                System.out.println("Header row is missing.");
+                return;
+            }
+            List<Integer> relevantColumns = findRelevantColumns(headerRow);
 
-            // Update the header row with the new columns
-            writeHeader(headerRow, extendedHeader);
+            // Extend headers with "Common ExactMatch" and "Common Missing"
+            int originalColumnCount = headerRow.getLastCellNum();
+            List<String> newHeaders = List.of("Common ExactMatch", "Common Missing");
+            writeHeader(headerRow, newHeaders);
 
-            // Iterate through all rows and process each
+            // Iterate through all rows starting from the second row (data rows)
             for (int i = 1; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
                 if (row != null) {
-                    // Read values from the row
-                    String[] values = readRow(row);
+                    // Read only relevant columns
+                    String[] values = readRow(row, relevantColumns);
 
-                    // Count ExactMatch and Missing for the row
+                    // Count ExactMatch and Missing entries
                     long exactMatchCount = Arrays.stream(values)
                             .filter(value -> value.startsWith("ExactMatch"))
                             .count();
@@ -46,8 +50,8 @@ public class ExcelColumnProcessor {
                             .filter(value -> value.startsWith("Missing"))
                             .count();
 
-                    // Update the row with the new counts
-                    writeRow(row, exactMatchCount, missingCount, extendedHeader.size());
+                    // Write counts back to the row
+                    writeRow(row, exactMatchCount, missingCount, originalColumnCount);
                 }
             }
 
@@ -63,22 +67,48 @@ public class ExcelColumnProcessor {
         }
     }
 
-    // Helper method to read a row from the Excel sheet into a String array
-    private static String[] readRow(Row row) {
-        if (row == null) {
-            return new String[0];
+    // Helper method to identify relevant columns based on headers like "common|docN"
+    private static List<Integer> findRelevantColumns(Row headerRow) {
+        List<Integer> relevantColumns = new ArrayList<>();
+        Pattern pattern = Pattern.compile("common\\|doc\\d+"); // Regex for "common|docN"
+
+        for (int i = 0; i < headerRow.getLastCellNum(); i++) {
+            Cell cell = headerRow.getCell(i, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
+            String header = cell.toString();
+            if (pattern.matcher(header).matches()) {
+                relevantColumns.add(i);
+            }
         }
 
-        List<String> cellValues = new ArrayList<>();
-        for (Cell cell : row) {
-            cellValues.add(cell.toString());
-        }
-        return cellValues.toArray(new String[0]);
+        return relevantColumns;
     }
 
-    // Helper method to read the header row and combine into "common|docN" format
-    private static List<String> readHeader(Row row) {
-        List<String> headers = new ArrayList<>();
-        for (Cell cell : row) {
-            headers.add(cell.toString());
+    // Helper method to read values from relevant columns in a row
+    private static String[] readRow(Row row, List<Integer> relevantColumns) {
+        String[] values = new String[relevantColumns.size()];
+        for (int i = 0; i < relevantColumns.size(); i++) {
+            int colIndex = relevantColumns.get(i);
+            Cell cell = row.getCell(colIndex, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
+            values[i] = cell.toString();
         }
+        return values;
+    }
+
+    // Helper method to write the extended headers
+    private static void writeHeader(Row headerRow, List<String> newHeaders) {
+        int columnCount = headerRow.getLastCellNum();
+        for (int i = 0; i < newHeaders.size(); i++) {
+            Cell cell = headerRow.createCell(columnCount + i, CellType.STRING);
+            cell.setCellValue(newHeaders.get(i));
+        }
+    }
+
+    // Helper method to write the ExactMatch and Missing counts to a row
+    private static void writeRow(Row row, long exactMatchCount, long missingCount, int originalColumnCount) {
+        Cell exactMatchCell = row.createCell(originalColumnCount, CellType.NUMERIC);
+        exactMatchCell.setCellValue(exactMatchCount);
+
+        Cell missingCell = row.createCell(originalColumnCount + 1, CellType.NUMERIC);
+        missingCell.setCellValue(missingCount);
+    }
+}
