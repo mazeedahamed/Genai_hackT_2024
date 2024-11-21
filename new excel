@@ -1,39 +1,41 @@
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.Map;
 import java.util.HashMap;
+import java.util.Map;
 
 public class ExcelFormulaUpdater {
 
     public static void main(String[] args) throws IOException {
-        // Variables for input and output sheets
+        // File paths
+        String filePath = "your-file-path.xlsx"; // Path to your Excel file
+
+        // Variables for sheet names
         String inputSheetName = "Test Execution Results"; // Source sheet with data
         String outputSheetName = "Status Report";         // Target sheet to write the formula
-        int lastRowNum = 9430;                           // Number of rows to include in formula
 
         // Map of headers and corresponding output cells
         Map<String, String> headerToCellMap = new HashMap<>();
         headerToCellMap.put("Overall ExactMatch", "D3");    // Header and output cell for Overall ExactMatch
         headerToCellMap.put("Common Exact Data", "D4");     // Header and output cell for Common Exact Data
 
-        // Open the workbook (create or read from a file)
-        Workbook workbook = new XSSFWorkbook();
-        // Create or access sheets
-        Sheet inputSheet = workbook.createSheet(inputSheetName);
-        Sheet outputSheet = workbook.createSheet(outputSheetName);
+        // Open the workbook from the existing file
+        FileInputStream fis = new FileInputStream(filePath);
+        Workbook workbook = new XSSFWorkbook(fis);
 
-        // Mock: Populate headers in input sheet
-        Row inputHeaderRow = inputSheet.createRow(0);
-        inputHeaderRow.createCell(0).setCellValue("SomeColumn");
-        inputHeaderRow.createCell(1).setCellValue("Overall ExactMatch");
-        inputHeaderRow.createCell(2).setCellValue("Common Exact Data");
+        // Get input and output sheets
+        Sheet inputSheet = workbook.getSheet(inputSheetName);
+        Sheet outputSheet = workbook.getSheet(outputSheetName);
 
-        // Mock: Add headers to output sheet
-        Row outputHeaderRow = outputSheet.createRow(0);
-        outputHeaderRow.createCell(0).setCellValue("Summary");
+        if (inputSheet == null || outputSheet == null) {
+            throw new IllegalArgumentException("Input or Output sheet not found in the workbook.");
+        }
+
+        // Fixed last row number
+        int lastRowNum = 9430;
 
         // Process each header and update the corresponding cell in the output sheet
         for (Map.Entry<String, String> entry : headerToCellMap.entrySet()) {
@@ -41,9 +43,13 @@ public class ExcelFormulaUpdater {
             String outputCellReference = entry.getValue();
 
             // Determine the column letter dynamically for the header in the input sheet
-            String columnLetter = getColumnLetterFromSheet(workbook, inputSheetName, header);
+            String columnLetter = getColumnLetterFromSheet(inputSheet, header);
 
-            // Generate the formula
+            if (columnLetter == null) {
+                throw new IllegalArgumentException("Header not found: " + header + " in sheet: " + inputSheetName);
+            }
+
+            // Generate the formula with the fixed last row number
             String formula = String.format(
                     "SUMIF('%s'!%s3:%s%d, \"False\", '%s'!%s3:%s%d)",
                     inputSheetName, "BQ", "BQ", lastRowNum, // Comparison column is fixed (BQ)
@@ -62,21 +68,17 @@ public class ExcelFormulaUpdater {
             cell.setCellFormula(formula);
         }
 
-        // Save the workbook to a file
-        try (FileOutputStream fos = new FileOutputStream("output.xlsx")) {
-            workbook.write(fos);
-        }
+        // Save the updated workbook to a file
+        FileOutputStream fos = new FileOutputStream(filePath);
+        workbook.write(fos);
 
         System.out.println("Formulas added to the " + outputSheetName + " sheet.");
         workbook.close();
+        fis.close();
     }
 
     // Helper method to find the column letter in a specific sheet
-    private static String getColumnLetterFromSheet(Workbook workbook, String sheetName, String headerName) {
-        Sheet sheet = workbook.getSheet(sheetName);
-        if (sheet == null) {
-            throw new IllegalArgumentException("Sheet not found: " + sheetName);
-        }
+    private static String getColumnLetterFromSheet(Sheet sheet, String headerName) {
         Row headerRow = sheet.getRow(0); // Assuming headers are in the first row
         if (headerRow != null) {
             for (int i = 0; i < headerRow.getLastCellNum(); i++) {
@@ -86,7 +88,7 @@ public class ExcelFormulaUpdater {
                 }
             }
         }
-        throw new IllegalArgumentException("Header not found: " + headerName + " in sheet: " + sheetName);
+        return null; // Return null if header not found
     }
 
     // Helper method to convert column index to Excel-style letter
