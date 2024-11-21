@@ -1,0 +1,84 @@
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+public class ExcelColumnProcessor {
+
+    public static void main(String[] args) {
+        // Path to the Excel file
+        String excelFilePath = "input.xlsx";
+        String outputFilePath = "output.xlsx";
+
+        try (FileInputStream fis = new FileInputStream(excelFilePath);
+             Workbook workbook = new XSSFWorkbook(fis)) {
+
+            // Read the first sheet from the Excel file
+            Sheet sheet = workbook.getSheetAt(0);
+
+            // Read headers and extend them with new columns
+            Row headerRow = sheet.getRow(0);
+            List<String> extendedHeader = readHeader(headerRow);
+            extendedHeader.add("Common ExactMatch");
+            extendedHeader.add("Common Missing");
+
+            // Update the header row with the new columns
+            writeHeader(headerRow, extendedHeader);
+
+            // Iterate through all rows and process each
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row != null) {
+                    // Read values from the row
+                    String[] values = readRow(row);
+
+                    // Count ExactMatch and Missing for the row
+                    long exactMatchCount = Arrays.stream(values)
+                            .filter(value -> value.startsWith("ExactMatch"))
+                            .count();
+
+                    long missingCount = Arrays.stream(values)
+                            .filter(value -> value.startsWith("Missing"))
+                            .count();
+
+                    // Update the row with the new counts
+                    writeRow(row, exactMatchCount, missingCount, extendedHeader.size());
+                }
+            }
+
+            // Write the updated workbook to a new file
+            try (FileOutputStream fos = new FileOutputStream(outputFilePath)) {
+                workbook.write(fos);
+            }
+
+            System.out.println("Processing complete. Updated file written to: " + outputFilePath);
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Helper method to read a row from the Excel sheet into a String array
+    private static String[] readRow(Row row) {
+        if (row == null) {
+            return new String[0];
+        }
+
+        List<String> cellValues = new ArrayList<>();
+        for (Cell cell : row) {
+            cellValues.add(cell.toString());
+        }
+        return cellValues.toArray(new String[0]);
+    }
+
+    // Helper method to read the header row and combine into "common|docN" format
+    private static List<String> readHeader(Row row) {
+        List<String> headers = new ArrayList<>();
+        for (Cell cell : row) {
+            headers.add(cell.toString());
+        }
