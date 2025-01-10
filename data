@@ -1,15 +1,16 @@
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.restassured.response.Response;
-import org.json.JSONArray;
-import org.json.JSONObject;
 
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 import static io.restassured.RestAssured.given;
 
 public class QuickProcessResponse {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         // Making the API call using Rest Assured
         Response apiResponse = given()
                 .baseUri("https://example.com/api") // Replace with your API endpoint
@@ -21,23 +22,28 @@ public class QuickProcessResponse {
                 .extract()
                 .response();
 
-        // Parse the response body
-        JSONObject jsonResponse = new JSONObject(apiResponse.getBody().asString());
+        // Initialize Jackson ObjectMapper
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        // Parse the JSON response
+        JsonNode rootNode = objectMapper.readTree(apiResponse.getBody().asString());
 
         // Extract metadata
-        String number = jsonResponse.getJSONObject("workflowMetadata").getString("instanceld");
-        String keyAccount = jsonResponse.getJSONObject("workflowMetadata").getString("keyAccount");
+        String number = rootNode.path("workflowMetadata").path("instanceld").asText();
+        String keyAccount = rootNode.path("workflowMetadata").path("keyAccount").asText();
 
         // Extract and process indirect parties
-        JSONArray indirectParties = jsonResponse.getJSONArray("indirectParties");
+        JsonNode indirectParties = rootNode.path("indirectParties");
 
         Map<String, Object> keyAccountMap = new HashMap<>();
 
-        indirectParties.forEach(item -> {
-            JSONObject party = (JSONObject) item;
-            boolean accepted = party.getBoolean("accepted");
-            boolean softDelete = party.getBoolean("softDelete");
-            boolean identifiedByGENAI = party.getBoolean("identifiedByGENAI");
+        Iterator<JsonNode> elements = indirectParties.elements();
+        while (elements.hasNext()) {
+            JsonNode party = elements.next();
+
+            boolean accepted = party.path("accepted").asBoolean();
+            boolean softDelete = party.path("softDelete").asBoolean();
+            boolean identifiedByGENAI = party.path("identifiedByGENAI").asBoolean();
 
             // Calculate expected status directly
             String expectedStatus = calculateExpectedStatus(accepted, softDelete, identifiedByGENAI);
@@ -47,7 +53,7 @@ public class QuickProcessResponse {
             keyAccountMap.put("softDelete", softDelete);
             keyAccountMap.put("identifiedByGENAI", identifiedByGENAI);
             keyAccountMap.put("Expected Status", expectedStatus);
-        });
+        }
 
         // Final Map: {number -> {keyAccount -> party details}}
         Map<String, Map<String, Object>> finalMap = new HashMap<>();
