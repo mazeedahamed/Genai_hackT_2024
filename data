@@ -1,10 +1,12 @@
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.restassured.response.Response;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.ss.usermodel.*;
 
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.*;
 
 import static io.restassured.RestAssured.given;
 
@@ -25,6 +27,9 @@ public class ResilientProcessResponse {
 
             // After processing, print the global map
             System.out.println("Final Global Map: " + globalMap);
+
+            // Write data to Excel file
+            writeDataToExcel(globalMap);
 
         } catch (Exception e) {
             System.err.println("An unexpected error occurred in the main process: " + e.getMessage());
@@ -117,5 +122,54 @@ public class ResilientProcessResponse {
         if (!accepted && softDelete && identifiedByGENAI) return "Identified BY GEN AI - Deleted";
         if (accepted && !softDelete && !identifiedByGENAI) return "Manually Added";
         return "Unknown Status";
+    }
+
+    /**
+     * Write the extracted data into an Excel file.
+     */
+    private static void writeDataToExcel(Map<String, Map<String, Map<String, Object>>> globalMap) {
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("Processed Data");
+
+            // Create header row
+            Row headerRow = sheet.createRow(0);
+            headerRow.createCell(0).setCellValue("Number");
+            headerRow.createCell(1).setCellValue("Key Account");
+            headerRow.createCell(2).setCellValue("Accepted");
+            headerRow.createCell(3).setCellValue("Soft Delete");
+            headerRow.createCell(4).setCellValue("Identified By GENAI");
+            headerRow.createCell(5).setCellValue("Expected Status");
+
+            // Fill data rows
+            int rowNum = 1;
+            for (Map.Entry<String, Map<String, Map<String, Object>>> entry : globalMap.entrySet()) {
+                String number = entry.getKey();
+                Map<String, Map<String, Object>> keyAccounts = entry.getValue();
+
+                for (Map.Entry<String, Map<String, Object>> keyAccountEntry : keyAccounts.entrySet()) {
+                    String keyAccount = keyAccountEntry.getKey();
+                    Map<String, Object> data = keyAccountEntry.getValue();
+
+                    Row row = sheet.createRow(rowNum++);
+                    row.createCell(0).setCellValue(number);
+                    row.createCell(1).setCellValue(keyAccount);
+                    row.createCell(2).setCellValue((Boolean) data.get("accepted"));
+                    row.createCell(3).setCellValue((Boolean) data.get("softDelete"));
+                    row.createCell(4).setCellValue((Boolean) data.get("identifiedByGENAI"));
+                    row.createCell(5).setCellValue((String) data.get("Expected Status"));
+                }
+            }
+
+            // Write to file
+            try (FileOutputStream fileOut = new FileOutputStream("ProcessedData.xlsx")) {
+                workbook.write(fileOut);
+            }
+
+            System.out.println("Data successfully written to Excel!");
+
+        } catch (IOException e) {
+            System.err.println("Error writing data to Excel: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 }
