@@ -10,57 +10,82 @@ import static io.restassured.RestAssured.given;
 
 public class QuickProcessResponse {
 
-    public static void main(String[] args) throws Exception {
-        // Making the API call using Rest Assured
-        Response apiResponse = given()
-                .baseUri("https://example.com/api") // Replace with your API endpoint
-                .header("Authorization", "Bearer YOUR_TOKEN") // Add token if required
-                .when()
-                .get("/endpoint") // Replace with your endpoint
-                .then()
-                .statusCode(200)
-                .extract()
-                .response();
+    public static void main(String[] args) {
+        try {
+            // Making the API call using Rest Assured
+            Response apiResponse = given()
+                    .baseUri("https://example.com/api") // Replace with your API endpoint
+                    .header("Authorization", "Bearer YOUR_TOKEN") // Add token if required
+                    .when()
+                    .get("/endpoint") // Replace with your endpoint
+                    .then()
+                    .statusCode(200)
+                    .extract()
+                    .response();
 
-        // Initialize Jackson ObjectMapper
-        ObjectMapper objectMapper = new ObjectMapper();
-
-        // Parse the JSON response
-        JsonNode rootNode = objectMapper.readTree(apiResponse.getBody().asString());
-
-        // Extract metadata
-        String number = rootNode.path("workflowMetadata").path("instanceld").asText();
-        String keyAccount = rootNode.path("workflowMetadata").path("keyAccount").asText();
-
-        // Extract and process indirect parties
-        JsonNode indirectParties = rootNode.path("indirectParties");
-
-        Map<String, Object> keyAccountMap = new HashMap<>();
-
-        Iterator<JsonNode> elements = indirectParties.elements();
-        while (elements.hasNext()) {
-            JsonNode party = elements.next();
-
-            boolean accepted = party.path("accepted").asBoolean();
-            boolean softDelete = party.path("softDelete").asBoolean();
-            boolean identifiedByGENAI = party.path("identifiedByGENAI").asBoolean();
-
-            // Calculate expected status directly
-            String expectedStatus = calculateExpectedStatus(accepted, softDelete, identifiedByGENAI);
-
-            // Add details for the current party
-            keyAccountMap.put("accepted", accepted);
-            keyAccountMap.put("softDelete", softDelete);
-            keyAccountMap.put("identifiedByGENAI", identifiedByGENAI);
-            keyAccountMap.put("Expected Status", expectedStatus);
+            // Process the API response
+            processApiResponse(apiResponse);
+        } catch (Exception e) {
+            System.err.println("An error occurred: " + e.getMessage());
+            e.printStackTrace();
         }
+    }
 
-        // Final Map: {number -> {keyAccount -> party details}}
-        Map<String, Map<String, Object>> finalMap = new HashMap<>();
-        finalMap.put(number, Map.of(keyAccount, keyAccountMap));
+    private static void processApiResponse(Response apiResponse) {
+        try {
+            // Initialize Jackson ObjectMapper
+            ObjectMapper objectMapper = new ObjectMapper();
 
-        // Print or return the result
-        System.out.println(finalMap);
+            // Parse the JSON response
+            JsonNode rootNode = objectMapper.readTree(apiResponse.getBody().asString());
+
+            // Validate required fields
+            if (rootNode.path("workflowMetadata").isMissingNode() ||
+                rootNode.path("indirectParties").isMissingNode()) {
+                throw new IllegalArgumentException("Invalid response: Missing required fields.");
+            }
+
+            // Extract metadata
+            String number = rootNode.path("workflowMetadata").path("instanceld").asText();
+            String keyAccount = rootNode.path("workflowMetadata").path("keyAccount").asText();
+
+            // Extract and process indirect parties
+            JsonNode indirectParties = rootNode.path("indirectParties");
+
+            Map<String, Object> keyAccountMap = new HashMap<>();
+
+            Iterator<JsonNode> elements = indirectParties.elements();
+            while (elements.hasNext()) {
+                JsonNode party = elements.next();
+
+                // Safely parse each field
+                boolean accepted = party.path("accepted").asBoolean(false); // Default to false if missing
+                boolean softDelete = party.path("softDelete").asBoolean(false); // Default to false if missing
+                boolean identifiedByGENAI = party.path("identifiedByGENAI").asBoolean(false); // Default to false if missing
+
+                // Calculate expected status directly
+                String expectedStatus = calculateExpectedStatus(accepted, softDelete, identifiedByGENAI);
+
+                // Add details for the current party
+                keyAccountMap.put("accepted", accepted);
+                keyAccountMap.put("softDelete", softDelete);
+                keyAccountMap.put("identifiedByGENAI", identifiedByGENAI);
+                keyAccountMap.put("Expected Status", expectedStatus);
+            }
+
+            // Final Map: {number -> {keyAccount -> party details}}
+            Map<String, Map<String, Object>> finalMap = new HashMap<>();
+            finalMap.put(number, Map.of(keyAccount, keyAccountMap));
+
+            // Print or return the result
+            System.out.println(finalMap);
+
+        } catch (IllegalArgumentException e) {
+            System.err.println("Validation error: " + e.getMessage());
+        } catch (Exception e) {
+            System.err.println("Unexpected error while processing response: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     /**
