@@ -1,0 +1,70 @@
+import io.restassured.response.Response;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import static io.restassured.RestAssured.given;
+
+public class QuickProcessResponse {
+
+    public static void main(String[] args) {
+        // Making the API call using Rest Assured
+        Response apiResponse = given()
+                .baseUri("https://example.com/api") // Replace with your API endpoint
+                .header("Authorization", "Bearer YOUR_TOKEN") // Add token if required
+                .when()
+                .get("/endpoint") // Replace with your endpoint
+                .then()
+                .statusCode(200)
+                .extract()
+                .response();
+
+        // Parse the response body
+        JSONObject jsonResponse = new JSONObject(apiResponse.getBody().asString());
+
+        // Extract metadata
+        String number = jsonResponse.getJSONObject("workflowMetadata").getString("instanceld");
+        String keyAccount = jsonResponse.getJSONObject("workflowMetadata").getString("keyAccount");
+
+        // Extract and process indirect parties
+        JSONArray indirectParties = jsonResponse.getJSONArray("indirectParties");
+
+        Map<String, Object> keyAccountMap = new HashMap<>();
+
+        indirectParties.forEach(item -> {
+            JSONObject party = (JSONObject) item;
+            boolean accepted = party.getBoolean("accepted");
+            boolean softDelete = party.getBoolean("softDelete");
+            boolean identifiedByGENAI = party.getBoolean("identifiedByGENAI");
+
+            // Calculate expected status directly
+            String expectedStatus = calculateExpectedStatus(accepted, softDelete, identifiedByGENAI);
+
+            // Add details for the current party
+            keyAccountMap.put("accepted", accepted);
+            keyAccountMap.put("softDelete", softDelete);
+            keyAccountMap.put("identifiedByGENAI", identifiedByGENAI);
+            keyAccountMap.put("Expected Status", expectedStatus);
+        });
+
+        // Final Map: {number -> {keyAccount -> party details}}
+        Map<String, Map<String, Object>> finalMap = new HashMap<>();
+        finalMap.put(number, Map.of(keyAccount, keyAccountMap));
+
+        // Print or return the result
+        System.out.println(finalMap);
+    }
+
+    /**
+     * Calculate the expected status based on the combinations of flags.
+     */
+    private static String calculateExpectedStatus(boolean accepted, boolean softDelete, boolean identifiedByGENAI) {
+        if (!accepted && !softDelete && identifiedByGENAI) return "Identified BY GENAI - Not Accepted Not Deleted";
+        if (accepted && !softDelete && identifiedByGENAI) return "Identified BY GENAI - Accepted";
+        if (!accepted && softDelete && identifiedByGENAI) return "Identified BY GENAI - Deleted";
+        if (accepted && !softDelete && !identifiedByGENAI) return "Manually Added";
+        return "Unknown Status";
+    }
+}
