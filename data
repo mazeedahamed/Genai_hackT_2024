@@ -10,6 +10,9 @@ import static io.restassured.RestAssured.given;
 
 public class ResilientProcessResponse {
 
+    // Global Map to hold all processed data
+    private static Map<String, Map<String, Map<String, Object>>> globalMap = new HashMap<>();
+
     public static void main(String[] args) {
         try {
             // Simulating multiple API responses for demonstration
@@ -19,6 +22,9 @@ public class ResilientProcessResponse {
             // Process multiple API responses
             processApiResponse(apiResponse1);
             processApiResponse(apiResponse2);
+
+            // After processing, print the global map
+            System.out.println("Final Global Map: " + globalMap);
 
         } catch (Exception e) {
             System.err.println("An unexpected error occurred in the main process: " + e.getMessage());
@@ -91,12 +97,9 @@ public class ResilientProcessResponse {
                 keyAccountMap.put("Expected Status", expectedStatus);
             }
 
-            // Final Map: {number -> {keyAccount -> party details}}
-            Map<String, Map<String, Object>> finalMap = new HashMap<>();
-            finalMap.put(number, Map.of(keyAccount, keyAccountMap));
-
-            // Print or return the result
-            System.out.println(finalMap);
+            // Safely update or add to the global map
+            globalMap.putIfAbsent(number, new HashMap<>());
+            globalMap.get(number).put(keyAccount, keyAccountMap);
 
         } catch (Exception e) {
             System.err.println("Error processing response: " + e.getMessage());
@@ -111,7 +114,7 @@ public class ResilientProcessResponse {
     private static String calculateExpectedStatus(boolean accepted, boolean softDelete, boolean identifiedByGENAI) {
         if (!accepted && !softDelete && identifiedByGENAI) return "Identified BY GENAI - Not Accepted Not Deleted";
         if (accepted && !softDelete && identifiedByGENAI) return "Identified BY GENAI - Accepted";
-        if (!accepted && softDelete && identifiedByGENAI) return "Identified BY GENAI - Deleted";
+        if (!accepted && softDelete && identifiedByGENAI) return "Identified BY GEN AI - Deleted";
         if (accepted && !softDelete && !identifiedByGENAI) return "Manually Added";
         return "Unknown Status";
     }
