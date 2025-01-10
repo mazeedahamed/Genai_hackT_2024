@@ -1,175 +1,51 @@
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.restassured.response.Response;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.apache.poi.ss.usermodel.*;
-
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.*;
-
-import static io.restassured.RestAssured.given;
-
-public class ResilientProcessResponse {
-
-    // Global Map to hold all processed data
-    private static Map<String, Map<String, Map<String, Object>>> globalMap = new HashMap<>();
-
-    public static void main(String[] args) {
-        try {
-            // Simulating multiple API responses for demonstration
-            Response apiResponse1 = getApiResponse("https://example.com/api/endpoint1");
-            Response apiResponse2 = getApiResponse("https://example.com/api/endpoint2");
-
-            // Process multiple API responses
-            processApiResponse(apiResponse1);
-            processApiResponse(apiResponse2);
-
-            // After processing, print the global map
-            System.out.println("Final Global Map: " + globalMap);
-
-            // Write data to Excel file
-            writeDataToExcel(globalMap);
-
-        } catch (Exception e) {
-            System.err.println("An unexpected error occurred in the main process: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private static Response getApiResponse(String apiUrl) {
-        try {
-            return given()
-                    .baseUri(apiUrl)
-                    .header("Authorization", "Bearer YOUR_TOKEN") // Add token if required
-                    .when()
-                    .get()
-                    .then()
-                    .statusCode(200) // Only proceed if the response is successful
-                    .extract()
-                    .response();
-        } catch (Exception e) {
-            System.err.println("Failed to fetch API response from: " + apiUrl + " | Error: " + e.getMessage());
-            return null; // Return null if the response fails
-        }
-    }
-
-    private static void processApiResponse(Response apiResponse) {
-        if (apiResponse == null) {
-            System.out.println("Skipping null response.");
-            return;
+private static void processApiResponse(Response apiResponse) {
+    try {
+        // Check if the response is null or empty before proceeding
+        if (apiResponse == null || apiResponse.getBody().asString().isEmpty()) {
+            System.err.println("Empty or null response received. Skipping...");
+            return; // Skip processing
         }
 
-        try {
-            // Initialize Jackson ObjectMapper
-            ObjectMapper objectMapper = new ObjectMapper();
+        // Check if the response contains the expected structure (indirectParties)
+        List<Map<String, Object>> indirectParties = apiResponse.jsonPath().getList("indirectParties");
+        if (indirectParties == null || indirectParties.isEmpty()) {
+            System.err.println("No indirectParties found in the response. Skipping...");
+            return; // Skip processing
+        }
 
-            // Parse the JSON response
-            JsonNode rootNode = objectMapper.readTree(apiResponse.getBody().asString());
-
-            // Validate required fields
-            if (rootNode.path("workflowMetadata").isMissingNode() ||
-                rootNode.path("indirectParties").isMissingNode()) {
-                System.out.println("Skipping invalid response: Missing required fields.");
-                return;
+        // Iterate over indirect parties and process each one
+        for (Map<String, Object> party : indirectParties) {
+            String keyAccount = (String) party.get("keyAccount");
+            if (keyAccount == null || keyAccount.isEmpty()) {
+                System.err.println("Missing keyAccount. Skipping this entry...");
+                continue; // Skip this entry if keyAccount is missing or invalid
             }
 
-            // Extract metadata
-            String number = rootNode.path("workflowMetadata").path("instanceld").asText();
-            String keyAccount = rootNode.path("workflowMetadata").path("keyAccount").asText();
+            boolean accepted = (boolean) party.get("accepted");
+            boolean softDelete = (boolean) party.get("softDelete");
+            boolean identifiedByGENAI = (boolean) party.get("identifiedByGENAI");
 
-            // Extract and process indirect parties
-            JsonNode indirectParties = rootNode.path("indirectParties");
+            // Determine the expected status
+            String expectedStatus = determineExpectedStatus(accepted, softDelete, identifiedByGENAI);
 
-            Map<String, Object> keyAccountMap = new HashMap<>();
+            // Extract documentIds using jsonPath()
+            List<String> documentIds = apiResponse.jsonPath().getList("indirectParties.sourcelnfo.documentId");
 
-            Iterator<JsonNode> elements = indirectParties.elements();
-            while (elements.hasNext()) {
-                JsonNode party = elements.next();
+            // Add data to global map
+            Map<String, Object> partyData = new HashMap<>();
+            partyData.put("accepted", accepted);
+            partyData.put("softDelete", softDelete);
+            partyData.put("identifiedByGENAI", identifiedByGENAI);
+            partyData.put("expectedStatus", expectedStatus);
+            partyData.put("documentIds", documentIds);
 
-                // Safely parse each field
-                boolean accepted = party.path("accepted").asBoolean(false); // Default to false if missing
-                boolean softDelete = party.path("softDelete").asBoolean(false); // Default to false if missing
-                boolean identifiedByGENAI = party.path("identifiedByGENAI").asBoolean(false); // Default to false if missing
+            Map<String, Map<String, Object>> keyAccountData = new HashMap<>();
+            keyAccountData.put(keyAccount, partyData);
 
-                // Calculate expected status directly
-                String expectedStatus = calculateExpectedStatus(accepted, softDelete, identifiedByGENAI);
-
-                // Add details for the current party
-                keyAccountMap.put("accepted", accepted);
-                keyAccountMap.put("softDelete", softDelete);
-                keyAccountMap.put("identifiedByGENAI", identifiedByGENAI);
-                keyAccountMap.put("Expected Status", expectedStatus);
-            }
-
-            // Safely update or add to the global map
-            globalMap.putIfAbsent(number, new HashMap<>());
-            globalMap.get(number).put(keyAccount, keyAccountMap);
-
-        } catch (Exception e) {
-            System.err.println("Error processing response: " + e.getMessage());
-            e.printStackTrace();
-            System.out.println("Skipping to the next response.");
+            globalMap.put(String.valueOf(party.get("instanceld")), keyAccountData);
         }
-    }
-
-    /**
-     * Calculate the expected status based on the combinations of flags.
-     */
-    private static String calculateExpectedStatus(boolean accepted, boolean softDelete, boolean identifiedByGENAI) {
-        if (!accepted && !softDelete && identifiedByGENAI) return "Identified BY GENAI - Not Accepted Not Deleted";
-        if (accepted && !softDelete && identifiedByGENAI) return "Identified BY GENAI - Accepted";
-        if (!accepted && softDelete && identifiedByGENAI) return "Identified BY GEN AI - Deleted";
-        if (accepted && !softDelete && !identifiedByGENAI) return "Manually Added";
-        return "Unknown Status";
-    }
-
-    /**
-     * Write the extracted data into an Excel file.
-     */
-    private static void writeDataToExcel(Map<String, Map<String, Map<String, Object>>> globalMap) {
-        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
-            Sheet sheet = workbook.createSheet("Processed Data");
-
-            // Create header row
-            Row headerRow = sheet.createRow(0);
-            headerRow.createCell(0).setCellValue("Number");
-            headerRow.createCell(1).setCellValue("Key Account");
-            headerRow.createCell(2).setCellValue("Accepted");
-            headerRow.createCell(3).setCellValue("Soft Delete");
-            headerRow.createCell(4).setCellValue("Identified By GENAI");
-            headerRow.createCell(5).setCellValue("Expected Status");
-
-            // Fill data rows
-            int rowNum = 1;
-            for (Map.Entry<String, Map<String, Map<String, Object>>> entry : globalMap.entrySet()) {
-                String number = entry.getKey();
-                Map<String, Map<String, Object>> keyAccounts = entry.getValue();
-
-                for (Map.Entry<String, Map<String, Object>> keyAccountEntry : keyAccounts.entrySet()) {
-                    String keyAccount = keyAccountEntry.getKey();
-                    Map<String, Object> data = keyAccountEntry.getValue();
-
-                    Row row = sheet.createRow(rowNum++);
-                    row.createCell(0).setCellValue(number);
-                    row.createCell(1).setCellValue(keyAccount);
-                    row.createCell(2).setCellValue((Boolean) data.get("accepted"));
-                    row.createCell(3).setCellValue((Boolean) data.get("softDelete"));
-                    row.createCell(4).setCellValue((Boolean) data.get("identifiedByGENAI"));
-                    row.createCell(5).setCellValue((String) data.get("Expected Status"));
-                }
-            }
-
-            // Write to file
-            try (FileOutputStream fileOut = new FileOutputStream("ProcessedData.xlsx")) {
-                workbook.write(fileOut);
-            }
-
-            System.out.println("Data successfully written to Excel!");
-
-        } catch (IOException e) {
-            System.err.println("Error writing data to Excel: " + e.getMessage());
-            e.printStackTrace();
-        }
+    } catch (Exception e) {
+        System.err.println("Error processing API response: " + e.getMessage());
+        e.printStackTrace();
     }
 }
