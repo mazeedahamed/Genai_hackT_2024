@@ -1,1 +1,6 @@
-This module focuses on the execution and evaluation of prompts using different metrics to score and rank them effectively. It’s designed to analyze prompts from all perspectives—such as accuracy, readability, and safety—and provide a detailed summary of each prompt based on these aspects.
+First, the module executes the prompts with a dataset using consistent settings (like GPT-4, Turbo, etc.) and extracts OpenAI responses. The results are then analyzed based on various metrics for a detailed evaluation. This ensures uniformity in evaluation by:
+
+Running each prompt with the same hyperparameters.
+Extracting OpenAI responses for further analysis.
+Preparing the results for scoring across different metrics.
+This step ensures that all prompts are evaluated under identical conditions, allowing for fair and reliable comparisons.
