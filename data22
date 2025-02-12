@@ -1,8 +1,25 @@
-if "parties" in response_data and isinstance(response_data["parties"], list) and len(response_data["parties"]) > 0:
-                    for party in response_data["parties"]:
-                        name = party.get("fullName") if "fullName" in party else party.get("firstName")
-                        extracted_data.append({
-                            "type": party.get("type"),
-                            "name": name,
-                            "country": party.get("country")
-                        })
+def update_excel(excel_path, extracted_data):
+    df = pd.read_excel(excel_path)
+    df = df.astype(str).apply(lambda x: x.str.strip().str.lower())  # Normalize data
+    
+    for data in extracted_data:
+        match_condition = (
+            (df['type'] == str(data['type']).strip().lower()) &
+            (df['name'] == str(data['name']).strip().lower()) &
+            (df['country'] == str(data['country']).strip().lower())
+        )
+        
+        if match_condition.any():
+            df.loc[match_condition, 'status'] = 'match'
+        else:
+            new_row = {
+                "type": data["type"], 
+                "name": data["name"], 
+                "country": data["country"], 
+                "status": "additional", 
+                "parties": str(data)  # Store full extracted entry as string in 'parties' column
+            }
+            df = df.append(new_row, ignore_index=True)
+    
+    df.to_excel(excel_path, index=False)
+    print("Excel updated successfully.")
