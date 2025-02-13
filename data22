@@ -1,12 +1,17 @@
-            if "parties" in response_data and isinstance(response_data["parties"], list):
-                for party in response_data["parties"]:
-                    name = party.get("fullName") if "fullName" in party else party.get("firstName")
-                    extracted_data.append({
-                        "type": party.get("type"),
-                        "name": name.strip() if name else None,
-                        "country": party.get("country").strip() if party.get("country") else None
-                    })
+iteration = 1
+    while f"iteration{iteration}status" in df.columns:
+        iteration += 1
+    status_col = f"iteration{iteration}status"
+    values_col = f"iteration{iteration}values"
     
-    df = pd.DataFrame(extracted_data)
-    df.to_excel(output_excel_path, index=False)
-    print("Response data written to Excel successfully.")
+    df[status_col] = None
+    df[values_col] = None
+
+else:
+            new_row = {
+                "type": data["type"], 
+                "name": data["name"], 
+                "country": data["country"], 
+                status_col: "additional", 
+                values_col: str(data)  # Store full extracted entry as string
+            }
