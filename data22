@@ -15,3 +15,29 @@ else:
                 status_col: "additional", 
                 values_col: str(data)  # Store full extracted entry as string
             }
+
+
+        
+        if match_condition.any():
+            if (df.loc[match_condition, status_col] == 'match').any():
+                new_row = {
+                    "type": data["type"], 
+                    "name": data["name"], 
+                    "country": data["country"], 
+                    status_col: "duplicate", 
+                    values_col: str(data)  # Store full extracted entry as string
+                }
+                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            else:
+                df.loc[match_condition, status_col] = 'match'
+                df.loc[match_condition, values_col] = str(data)
+        else:
+            new_row = {
+                "type": data["type"], 
+                "name": data["name"], 
+                "country": data["country"], 
+                status_col: "additional", 
+                values_col: str(data)  # Store full extracted entry as string
+            }
+            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    
