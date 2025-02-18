@@ -1,22 +1,27 @@
 import pandas as pd
 from datetime import datetime
+import re
 
 def parse_timestamp(timestamp):
     try:
-        return datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S%z")
+        # Ensure timestamp follows expected format and remove any trailing characters
+        timestamp = timestamp.strip()
+        match = re.match(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?[-+]\d{2}:\d{2})", timestamp)
+        if match:
+            return datetime.strptime(match.group(1), "%Y-%m-%dT%H:%M:%S.%f%z")
     except (ValueError, TypeError):
         return None
 
 def calculate_time_difference(file_path):
     # Read the Excel file
-    df = pd.read_excel(file_path, usecols=["created", "updated"], nrows=2)
+    df = pd.read_excel(file_path, usecols=["created", "updated"], nrows=2, dtype=str)
     
     # Initialize a new column for time taken
     df["time taken"] = None
     
     for index, row in df.iterrows():
-        created_time = parse_timestamp(row["created"])
-        updated_time = parse_timestamp(row["updated"])
+        created_time = parse_timestamp(str(row["created"]))
+        updated_time = parse_timestamp(str(row["updated"]))
         
         if created_time and updated_time:
             df.at[index, "time taken"] = updated_time - created_time
