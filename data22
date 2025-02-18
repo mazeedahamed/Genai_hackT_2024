@@ -2,22 +2,31 @@ import pandas as pd
 from datetime import datetime
 
 def parse_timestamp(timestamp):
-    return datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S%z")
+    try:
+        return datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S%z")
+    except (ValueError, TypeError):
+        return None
 
 def calculate_time_difference(file_path):
     # Read the Excel file
     df = pd.read_excel(file_path, usecols=["created", "updated"], nrows=2)
     
-    # Parse timestamps
-    created_time = parse_timestamp(df.loc[0, "created"])
-    updated_time = parse_timestamp(df.loc[0, "updated"])
+    # Initialize a new column for time taken
+    df["time taken"] = None
     
-    # Calculate difference
-    time_difference = updated_time - created_time
+    for index, row in df.iterrows():
+        created_time = parse_timestamp(row["created"])
+        updated_time = parse_timestamp(row["updated"])
+        
+        if created_time and updated_time:
+            df.at[index, "time taken"] = updated_time - created_time
     
-    return time_difference
+    # Save back to the file
+    df.to_excel(file_path, index=False)
+    
+    return df
 
 # Example usage
 file_path = "your_excel_file.xlsx"  # Change to your actual file path
-diff = calculate_time_difference(file_path)
-print("Time Difference:", diff)
+df_result = calculate_time_difference(file_path)
+print(df_result)
