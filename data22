@@ -4,31 +4,31 @@ import re
 
 def parse_timestamp(timestamp):
     try:
-        # Ensure timestamp follows expected format and remove any trailing characters
+        if timestamp == "#N/A":
+            return None
         timestamp = timestamp.strip()
-        match = re.match(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?[-+]\d{2}:\d{2})", timestamp)
+        match = re.match(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([-+]\d{2}:\d{2}))", timestamp)
         if match:
-            return datetime.strptime(match.group(1), "%Y-%m-%dT%H:%M:%S.%f%z")
+            fmt = "%Y-%m-%dT%H:%M:%S%z" if "." not in match.group(1) else "%Y-%m-%dT%H:%M:%S.%f%z"
+            return datetime.strptime(match.group(1), fmt)
     except (ValueError, TypeError):
         return None
 
+def get_time_difference(start, end):
+    return str(end - start) if start and end else None
+
 def calculate_time_difference(file_path):
-    # Read the Excel file
-    df = pd.read_excel(file_path, usecols=["created", "updated"], nrows=2, dtype=str)
-    
-    # Initialize a new column for time taken
+    df = pd.read_excel(file_path, usecols=["created", "updated"], dtype=str)
     df["time taken"] = None
     
     for index, row in df.iterrows():
-        created_time = parse_timestamp(str(row["created"]))
-        updated_time = parse_timestamp(str(row["updated"]))
+        created_time = parse_timestamp(row["created"])
+        updated_time = parse_timestamp(row["updated"])
         
         if created_time and updated_time:
-            df.at[index, "time taken"] = updated_time - created_time
+            df.at[index, "time taken"] = get_time_difference(created_time, updated_time)
     
-    # Save back to the file
     df.to_excel(file_path, index=False)
-    
     return df
 
 # Example usage
