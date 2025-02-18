@@ -1,43 +1,23 @@
-iteration = 1
-    while f"iteration{iteration}status" in df.columns:
-        iteration += 1
-    status_col = f"iteration{iteration}status"
-    values_col = f"iteration{iteration}values"
+import pandas as pd
+from datetime import datetime
+
+def parse_timestamp(timestamp):
+    return datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S%z")
+
+def calculate_time_difference(file_path):
+    # Read the Excel file
+    df = pd.read_excel(file_path, usecols=["created", "updated"], nrows=2)
     
-    df[status_col] = None
-    df[values_col] = None
-
-else:
-            new_row = {
-                "type": data["type"], 
-                "name": data["name"], 
-                "country": data["country"], 
-                status_col: "additional", 
-                values_col: str(data)  # Store full extracted entry as string
-            }
-
-
-        
-        if match_condition.any():
-            if (df.loc[match_condition, status_col] == 'match').any():
-                new_row = {
-                    "type": data["type"], 
-                    "name": data["name"], 
-                    "country": data["country"], 
-                    status_col: "duplicate", 
-                    values_col: str(data)  # Store full extracted entry as string
-                }
-                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-            else:
-                df.loc[match_condition, status_col] = 'match'
-                df.loc[match_condition, values_col] = str(data)
-        else:
-            new_row = {
-                "type": data["type"], 
-                "name": data["name"], 
-                "country": data["country"], 
-                status_col: "additional", 
-                values_col: str(data)  # Store full extracted entry as string
-            }
-            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    # Parse timestamps
+    created_time = parse_timestamp(df.loc[0, "created"])
+    updated_time = parse_timestamp(df.loc[0, "updated"])
     
+    # Calculate difference
+    time_difference = updated_time - created_time
+    
+    return time_difference
+
+# Example usage
+file_path = "your_excel_file.xlsx"  # Change to your actual file path
+diff = calculate_time_difference(file_path)
+print("Time Difference:", diff)
