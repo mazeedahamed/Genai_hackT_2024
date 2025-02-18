@@ -1,5 +1,5 @@
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 
 def parse_timestamp(timestamp):
     try:
@@ -30,7 +30,26 @@ def calculate_time_difference(file_path):
     df.to_excel(file_path, index=False)
     return df
 
+def calculate_avg_time_taken(file_path):
+    df = pd.read_excel(file_path, usecols=["time taken"], dtype=str)
+    total_time = timedelta()
+    count = 0
+    
+    for time_str in df["time taken"].dropna():
+        try:
+            h, m, s = map(float, time_str.split(":"))
+            time_delta = timedelta(hours=h, minutes=m, seconds=s)
+            total_time += time_delta
+            count += 1
+        except ValueError:
+            continue
+    
+    avg_time = total_time / count if count else timedelta()
+    print(f"Total Time: {total_time}, Count: {count}, Average Time Taken: {avg_time}")
+    return total_time, avg_time
+
 # Example usage
 file_path = "your_excel_file.xlsx"  # Change to your actual file path
 df_result = calculate_time_difference(file_path)
 print(df_result)
+calculate_avg_time_taken(file_path)
