@@ -1,21 +1,20 @@
 import pandas as pd
 from datetime import datetime
-import re
 
 def parse_timestamp(timestamp):
     try:
-        if timestamp == "#N/A":
+        if timestamp == "#N/A" or pd.isna(timestamp):
             return None
         timestamp = timestamp.strip()
-        match = re.match(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([-+]\d{2}:\d{2}))", timestamp)
-        if match:
-            fmt = "%Y-%m-%dT%H:%M:%S%z" if "." not in match.group(1) else "%Y-%m-%dT%H:%M:%S.%f%z"
-            return datetime.strptime(match.group(1), fmt)
+        fmt = "%Y-%m-%dT%H:%M:%S.%fZ" if "." in timestamp else "%Y-%m-%dT%H:%M:%SZ"
+        return datetime.strptime(timestamp, fmt)
     except (ValueError, TypeError):
         return None
 
 def get_time_difference(start, end):
-    return str(end - start) if start and end else None
+    if start and end:
+        return str(end - start)
+    return None
 
 def calculate_time_difference(file_path):
     df = pd.read_excel(file_path, usecols=["created", "updated"], dtype=str)
