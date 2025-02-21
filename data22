@@ -1,35 +1,49 @@
-unmatched_list = []
+import pandas as pd
 
+# Sample DataFrame (simulating Excel data)
+df = pd.DataFrame({
+    'type': [None, 'Admin', 'User', 'Manager'],
+    'name': ['John', 'Alice', None, 'Bob'],
+    'country': ['USA', 'UK', 'Canada', None]
+})
+
+# Clean the DataFrame
+cleaned_df = df.fillna('').astype(str).applymap(lambda x: x.strip().lower())
+
+# Sample API data
+extracted_data = [
+    {'type': 'Admin', 'name': 'John', 'country': 'USA'},
+    {'type': 'User', 'name': 'Alice', 'country': 'UK'},
+    {'type': '', 'name': '', 'country': 'Canada'},  # Intentional mismatch
+]
+
+# Debug unmatched rows
 for data in extracted_data:
-    # Convert data values to empty strings if None or blank
-    data_type = str(data.get('type') or '').strip().lower()
-    data_name = str(data.get('name') or '').strip().lower()
-    data_country = str(data.get('country') or '').strip().lower()
+    data_type = str(data.get('type', '')).strip().lower()
+    data_name = str(data.get('name', '')).strip().lower()
+    data_country = str(data.get('country', '')).strip().lower()
 
-    # Prepare DataFrame columns with consistent formatting and NaN handling
-    df_type = df['type'].fillna('').astype(str).str.strip().str.lower()
-    df_name = df['name'].fillna('').astype(str).str.strip().str.lower()
-    df_country = df['country'].fillna('').astype(str).str.strip().str.lower()
-
-    # Create the match condition
+    # Create match condition
     match_condition = (
-        (df_type == data_type) &
-        (df_name == data_name) &
-        (df_country == data_country)
+        (cleaned_df['type'] == data_type) &
+        (cleaned_df['name'] == data_name) &
+        (cleaned_df['country'] == data_country)
     )
-    
-    # Check for unmatched rows
-    if not match_condition.any():
-        unmatched_list.append({
-            'data_type': data_type,
-            'data_name': data_name,
-            'data_country': data_country
-        })
 
-# Print unmatched entries
-if unmatched_list:
-    print("\n❌ Unmatched List:")
-    for item in unmatched_list:
-        print(item)
-else:
-    print("\n✅ All data matched successfully.")
+    if not match_condition.any():
+        print("\n❌ Mismatch found:")
+        print(f"🔎 API Data: {data}")
+
+        # Find potential matches based on name and country
+        potential_matches = cleaned_df[
+            (cleaned_df['name'] == data_name) | (cleaned_df['country'] == data_country)
+        ]
+
+        # Print details for debugging
+        for idx, row in potential_matches.iterrows():
+            print(f"\n📄 Excel Row: {row.to_dict()}")
+
+            print("\n🔬 Comparison:")
+            print(f"Type    - Excel: {repr(row['type'])} | API: {repr(data_type)}")
+            print(f"Name    - Excel: {repr(row['name'])} | API: {repr(data_name)}")
+            print(f"Country - Excel: {repr(row['country'])} | API: {repr(data_country)}")
