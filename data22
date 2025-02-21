@@ -1,55 +1,35 @@
-import pandas as pd
-from datetime import datetime, timedelta
+unmatched_list = []
 
-def parse_timestamp(timestamp):
-    try:
-        if timestamp == "#N/A" or pd.isna(timestamp):
-            return None
-        timestamp = timestamp.strip()
-        fmt = "%Y-%m-%dT%H:%M:%S.%fZ" if "." in timestamp else "%Y-%m-%dT%H:%M:%SZ"
-        return datetime.strptime(timestamp, fmt)
-    except (ValueError, TypeError):
-        return None
+for data in extracted_data:
+    # Convert data values to empty strings if None or blank
+    data_type = str(data.get('type') or '').strip().lower()
+    data_name = str(data.get('name') or '').strip().lower()
+    data_country = str(data.get('country') or '').strip().lower()
 
-def get_time_difference(start, end):
-    if start and end:
-        return str(end - start)
-    return None
+    # Prepare DataFrame columns with consistent formatting and NaN handling
+    df_type = df['type'].fillna('').astype(str).str.strip().str.lower()
+    df_name = df['name'].fillna('').astype(str).str.strip().str.lower()
+    df_country = df['country'].fillna('').astype(str).str.strip().str.lower()
 
-def calculate_time_difference(file_path):
-    df = pd.read_excel(file_path, usecols=["created", "updated"], dtype=str)
-    df["time taken"] = None
+    # Create the match condition
+    match_condition = (
+        (df_type == data_type) &
+        (df_name == data_name) &
+        (df_country == data_country)
+    )
     
-    for index, row in df.iterrows():
-        created_time = parse_timestamp(row["created"])
-        updated_time = parse_timestamp(row["updated"])
-        
-        if created_time and updated_time:
-            df.at[index, "time taken"] = get_time_difference(created_time, updated_time)
-    
-    df.to_excel(file_path, index=False)
-    return df
+    # Check for unmatched rows
+    if not match_condition.any():
+        unmatched_list.append({
+            'data_type': data_type,
+            'data_name': data_name,
+            'data_country': data_country
+        })
 
-def calculate_avg_time_taken(file_path):
-    df = pd.read_excel(file_path, usecols=["time taken"], dtype=str)
-    total_time = timedelta()
-    count = 0
-    
-    for time_str in df["time taken"].dropna():
-        try:
-            h, m, s = map(float, time_str.split(":"))
-            time_delta = timedelta(hours=h, minutes=m, seconds=s)
-            total_time += time_delta
-            count += 1
-        except ValueError:
-            continue
-    
-    avg_time = total_time / count if count else timedelta()
-    print(f"Total Time: {total_time}, Count: {count}, Average Time Taken: {avg_time}")
-    return total_time, avg_time
-
-# Example usage
-file_path = "your_excel_file.xlsx"  # Change to your actual file path
-df_result = calculate_time_difference(file_path)
-print(df_result)
-calculate_avg_time_taken(file_path)
+# Print unmatched entries
+if unmatched_list:
+    print("\n❌ Unmatched List:")
+    for item in unmatched_list:
+        print(item)
+else:
+    print("\n✅ All data matched successfully.")
