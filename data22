@@ -1,49 +1,57 @@
 import pandas as pd
 
-# Sample DataFrame (simulating Excel data)
-df = pd.DataFrame({
-    'type': [None, 'Admin', 'User', 'Manager'],
-    'name': ['John', 'Alice', None, 'Bob'],
-    'country': ['USA', 'UK', 'Canada', None]
-})
+def update_excel(excel_path, extracted_data, sheet_name):
+    # Read the Excel sheet and normalize data
+    df = pd.read_excel(excel_path, sheet_name=sheet_name)
+    df = df.astype(str).apply(lambda x: x.str.strip().str.lower())
 
-# Clean the DataFrame
-cleaned_df = df.fillna('').astype(str).applymap(lambda x: x.strip().lower())
+    status_col = "iteration_status"
 
-# Sample API data
-extracted_data = [
-    {'type': 'Admin', 'name': 'John', 'country': 'USA'},
-    {'type': 'User', 'name': 'Alice', 'country': 'UK'},
-    {'type': '', 'name': '', 'country': 'Canada'},  # Intentional mismatch
-]
+    # Create status_col if it doesn't exist
+    if status_col not in df.columns:
+        df[status_col] = None
 
-# Debug unmatched rows
-for data in extracted_data:
-    data_type = str(data.get('type', '')).strip().lower()
-    data_name = str(data.get('name', '')).strip().lower()
-    data_country = str(data.get('country', '')).strip().lower()
+    for data in extracted_data:
+        match_condition = (
+            (df['type'] == str(data['type']).strip().lower()) &
+            (df['name'] == str(data['name']).strip().lower()) &
+            (df['country'] == str(data['country']).strip().lower())
+        )
 
-    # Create match condition
-    match_condition = (
-        (cleaned_df['type'] == data_type) &
-        (cleaned_df['name'] == data_name) &
-        (cleaned_df['country'] == data_country)
-    )
+        matched_rows = df.loc[match_condition]
 
-    if not match_condition.any():
-        print("\n❌ Mismatch found:")
-        print(f"🔎 API Data: {data}")
+        if not matched_rows.empty:
+            # Check if there is any matched row with empty or NaN status_col
+            if ((matched_rows[status_col].isna()) | (matched_rows[status_col] == '')).any():
+                # Update only rows with empty status to 'match'
+                df.loc[match_condition & ((df[status_col].isna()) | (df[status_col] == '')), status_col] = 'match'
+            else:
+                # If all matched rows already have a non-empty status, add a new row with 'duplicate'
+                new_row = {
+                    "type": data["type"],
+                    "name": data["name"],
+                    "country": data["country"],
+                    "dob": data.get("dob", ""),
+                    "nationality": data.get("nationality", ""),
+                    "gender": data.get("gender", ""),
+                    status_col: "duplicate",
+                    "values": str(data)
+                }
+                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        else:
+            # No match found, add a new row with 'additional' status
+            new_row = {
+                "type": data["type"],
+                "name": data["name"],
+                "country": data["country"],
+                "dob": data.get("dob", ""),
+                "nationality": data.get("nationality", ""),
+                "gender": data.get("gender", ""),
+                status_col: "additional",
+                "values": str(data)
+            }
+            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
-        # Find potential matches based on name and country
-        potential_matches = cleaned_df[
-            (cleaned_df['name'] == data_name) | (cleaned_df['country'] == data_country)
-        ]
-
-        # Print details for debugging
-        for idx, row in potential_matches.iterrows():
-            print(f"\n📄 Excel Row: {row.to_dict()}")
-
-            print("\n🔬 Comparison:")
-            print(f"Type    - Excel: {repr(row['type'])} | API: {repr(data_type)}")
-            print(f"Name    - Excel: {repr(row['name'])} | API: {repr(data_name)}")
-            print(f"Country - Excel: {repr(row['country'])} | API: {repr(data_country)}")
+    # Save the updated DataFrame back to Excel
+    df.to_excel(excel_path, sheet_name=sheet_name, index=False)
+    print("Excel updated successfully.")
