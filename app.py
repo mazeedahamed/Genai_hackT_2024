@@ -1,7 +1,7 @@
-SELECT r.transaction_id
-FROM request r
-JOIN req_document_info d ON r.request_id = d.request_id
-JOIN results res ON d.document_info = res.document_info
+SELECT r.transaction_id, rdi.request_id, rdi.document_name
+FROM results res
+JOIN req_document_info rdi ON res.document_info = rdi.document_info
+JOIN request r ON rdi.request_id = r.request_id
 WHERE res.processing_status = 'failed'
   AND res.operation = 'L'
-  AND d.document_name LIKE '2%';
+  AND rdi.document_name LIKE '2%';
