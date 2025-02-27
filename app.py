@@ -1,88 +1,59 @@
-import pandas as pd
-import os
+comment_groups = {
+    "Clients of Client": ["client-1", "client-2"],
+    "Direct Part": ["direct-1", "direct-2"],
+    "Manager": ["manager-1", "manager-2"],
+    "Supervisor": ["sup-1", "sup-2", "sup-3"],
+    "Team Lead": ["lead-1", "lead-2"]
+}
 
-# === CONFIGURATION ===
-excel1_path = "excel1.xlsx"
-excel2_path = "excel2.xlsx"
-output_path = "updated_excel1.xlsx"
-sheet_name = "sheet1"
+def generate_summary(df, comment_groups):
+    """
+    Generate a summary report based on new_status and grouped comment categories.
+    """
+    # Group by 'number' and count occurrences of different statuses
+    summary = df.groupby("number")[new_status_column].value_counts().unstack().fillna(0)
 
-# Columns for comparison
-columns_to_compare = ["Transactionid", "number", "name", "type", "country"]
-status_column = "status"
-new_status_column = "new_status"
+    # Rename columns for readability
+    summary = summary.rename(columns={
+        STATUS_CORRECT: "Correct and Complete",
+        STATUS_INCOMPLETE: "Incomplete",
+        STATUS_INCORRECT: "Incorrect",
+        STATUS_NEW_PARTY: "New Party Incorrect",
+        STATUS_VALID_DROP: "Valid Drop",
+        STATUS_MISSING: "Missing"
+    })
 
-# Status labels
-STATUS_CORRECT = "Correct and complete"
-STATUS_INCOMPLETE = "Incomplete"
-STATUS_INCORRECT = "Incorrect"
-STATUS_NEW_PARTY = "New Party Incorrect"
-STATUS_VALID_DROP = "Valid Drop"
-STATUS_MISSING = "Missing"
+    # Add missing status columns (if not present)
+    for status in ["Correct and Complete", "Incomplete", "Incorrect", "New Party Incorrect", "Valid Drop", "Missing"]:
+        if status not in summary.columns:
+            summary[status] = 0
 
-try:
-    # Check if files exist
-    if not os.path.exists(excel1_path) or not os.path.exists(excel2_path):
-        raise FileNotFoundError("One or both Excel files are missing!")
+    # Initialize grouped comment-based counts
+    for category in comment_groups.keys():
+        summary[category] = 0
 
-    # Load Excel files
-    df1 = pd.read_excel(excel1_path, sheet_name=sheet_name)
-    df2 = pd.read_excel(excel2_path, sheet_name=sheet_name)
+    # Count occurrences based on comment groups
+    for category, keywords in comment_groups.items():
+        regex_pattern = "|".join(keywords)  # Combine all keywords into a regex OR pattern
+        filtered_df = df[(df[new_status_column] == STATUS_INCORRECT) & (df[comments_column].str.contains(regex_pattern, na=False, case=False))]
+        comment_counts = filtered_df.groupby("number")[comments_column].count()
+        summary[category] = summary.index.map(comment_counts).fillna(0).astype(int)
 
-    # Convert columns to string to prevent type mismatches
-    for col in columns_to_compare + [status_column]:
-        df1[col] = df1[col].astype(str)
-        df2[col] = df2[col].astype(str)
+    return summary.reset_index()
 
-    # Extract Transaction ID before "_"
-    df1["Transactionid"] = df1["Transactionid"].apply(lambda x: x.split("_")[0] if "_" in x else x)
-    df2["Transactionid"] = df2["Transactionid"].apply(lambda x: x.split("_")[0] if "_" in x else x)
 
-    # Count occurrences of each unique record in both DataFrames
-    df1["count_df1"] = df1.groupby(columns_to_compare)["Transactionid"].transform("count")
-    df2["count_df2"] = df2.groupby(columns_to_compare)["Transactionid"].transform("count")
+====================
 
-    # Merge both DataFrames on key columns
-    merged_df = df1.merge(df2, on=columns_to_compare, how="outer", suffixes=("_df1", "_df2"), indicator=True)
+    # Drop unnecessary columns
+    merged_df.drop(columns=["_merge"], inplace=True, errors="ignore")
 
-    # Initialize new_status column
-    merged_df[new_status_column] = merged_df[status_column].copy()
+    # Generate summary using externalized comment groups
+    summary_df = generate_summary(merged_df, comment_groups)
 
-    # Process each row
-    for index, row in merged_df.iterrows():
-        count_df1 = row.get("count_df1", 0) if not pd.isna(row.get("count_df1", 0)) else 0
-        count_df2 = row.get("count_df2", 0) if not pd.isna(row.get("count_df2", 0)) else 0
-        status_df1 = row.get("status_df1")
+    # Save the updated file with normal data first, followed by the summary
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    summary_sheet_name = f"Summary_{timestamp}"
 
-        if count_df2 > count_df1:
-            # If df2 has more occurrences than df1, mark the extra ones as "New Party Incorrect"
-            if count_df1 > 0:
-                merged_df.at[index, new_status_column] = status_df1  # Keep original status for occurrences in df1
-            else:
-                merged_df.at[index, new_status_column] = STATUS_NEW_PARTY  # Extra occurrences in df2
-
-        elif count_df1 > count_df2:
-            # If df1 has more occurrences than df2, handle the extra ones
-            if count_df2 > 0:
-                merged_df.at[index, new_status_column] = status_df1  # Keep original status for occurrences in df2
-            else:
-                if status_df1 in [STATUS_CORRECT, STATUS_INCOMPLETE]:
-                    merged_df.at[index, new_status_column] = STATUS_MISSING
-                elif status_df1 == STATUS_INCORRECT:
-                    merged_df.at[index, new_status_column] = STATUS_VALID_DROP
-
-    # Drop helper columns
-    merged_df.drop(columns=["count_df1", "count_df2"], inplace=True, errors="ignore")
-
-    # Save the updated file
-    merged_df.to_excel(output_path, index=False)
-    print(f"✅ Updated Excel saved as: {output_path}")
-
-except FileNotFoundError as e:
-    print(f"❌ Error: {e}")
-
-except ValueError as e:
-    print(f"❌ Error: {e}")
-
-except Exception as e:
-    print(f"❌ An unexpected error occurred: {e}")
+    with pd.ExcelWriter(output_path, engine="xlsxwriter") as writer:
+        merged_df.to_excel(writer, sheet_name="Updated Data", index=False)
+        summary_df.to_excel(writer, sheet_name=summary_sheet_name, index=False)
