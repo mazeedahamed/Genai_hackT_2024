@@ -1,85 +1,69 @@
-import { Component } from '@angular/core';
+import pandas as pd
+import os
 
-@Component({
-  selector: 'app-root',
-  templateUrl: './app.component.html',
-  styleUrls: ['./app.component.css']
-})
-export class AppComponent {
-  public barChartData = {
-    labels: ['BERTScore', 'BLEU Sentence', 'BLEU Corpus', 'METEOR', 'TER'], // X-axis labels
-    datasets: [
-      {
-        label: 'User Prompt',
-        data: [0.78, 0.67, 0.56, 0.59, 0.67], // Y-axis values
-        backgroundColor: '#4285F4'
-      },
-      {
-        label: 'AI Suggested Prompt 1',
-        data: [0.83, 0.78, 0.66, 0.66, 0.6],
-        backgroundColor: '#34A853'
-      },
-      {
-        label: 'AI Suggested Prompt 2',
-        data: [0.81, 0.75, 0.661, 0.64, 0.6],
-        backgroundColor: '#FBBC04'
-      },
-      {
-        label: 'AI Suggested Prompt 3',
-        data: [0.86, 0.73, 0.64, 0.67, 0.58],
-        backgroundColor: '#EA4335'
-      }
-    ]
-  };
+# === CONFIGURATION ===
+excel1_path = "excel1.xlsx"
+excel2_path = "excel2.xlsx"
+output_path = "updated_excel1.xlsx"
+sheet_name = "sheet1"
 
-  public barChartOptions = {
-    responsive: true,
-    plugins: {
-      legend: {
-        position: 'top',
-      }
-    },
-    scales: {
-      x: {
-        title: {
-          display: true,
-          text: 'Metrics'
-        }
-      },
-      y: {
-        title: {
-          display: true,
-          text: 'Scores'
-        },
-        min: 0,
-        max: 1,
-        ticks: {
-          stepSize: 0.1
-        }
-      }
-    }
-  };
-}
+# Columns for comparison
+columns_to_compare = ["Transactionid", "number", "name", "type", "country"]
+status_column = "status"
+new_status_column = "new_status"
 
+# Status labels
+STATUS_CORRECT = "Correct and complete"
+STATUS_INCOMPLETE = "Incomplete"
+STATUS_INCORRECT = "Incorrect"
+STATUS_NEW_PARTY = "New Party Incorrect"
+STATUS_VALID_DROP = "Valid Drop"
+STATUS_MISSING = "Missing"
 
-========
-HTML ====
+try:
+    # Check if files exist
+    if not os.path.exists(excel1_path) or not os.path.exists(excel2_path):
+        raise FileNotFoundError("One or both Excel files are missing!")
 
-<div style="width: 70%; margin: 0 auto;">
-  <canvas baseChart
-          [data]="barChartData"
-          [options]="barChartOptions"
-          chartType="bar">
-  </canvas>
-</div>
+    # Load Excel files
+    df1 = pd.read_excel(excel1_path, sheet_name=sheet_name, dtype=str)
+    df2 = pd.read_excel(excel2_path, sheet_name=sheet_name, dtype=str)
 
+    # Ensure all required columns exist
+    required_columns = set(columns_to_compare + [status_column])
+    missing_columns_df1 = required_columns - set(df1.columns)
+    missing_columns_df2 = required_columns - set(df2.columns)
 
+    if missing_columns_df1 or missing_columns_df2:
+        raise ValueError(f"Missing columns: {missing_columns_df1} in df1, {missing_columns_df2} in df2")
 
-======
-css====
+    # Assign occurrence numbers correctly
+    df1['occurrence'] = df1.groupby(columns_to_compare).cumcount() + 1
+    df2['occurrence'] = df2.groupby(columns_to_compare).cumcount() + 1
 
-div {
-  text-align: center;
-  margin-top: 20px;
-}
+    # Merge both DataFrames on key columns and occurrences
+    merged_df = df1.merge(df2, on=columns_to_compare + ['occurrence'], how="outer", suffixes=("_df1", "_df2"), indicator=True)
 
+    # Initialize new_status column with the existing status from df1
+    merged_df[new_status_column] = merged_df.get("status_df1", "")
+
+    # Vectorized Status Assignment
+    merged_df.loc[merged_df["_merge"] == "right_only", new_status_column] = STATUS_NEW_PARTY
+    merged_df.loc[(merged_df["_merge"] == "left_only") & merged_df["status_df1"].isin([STATUS_CORRECT, STATUS_INCOMPLETE]), new_status_column] = STATUS_MISSING
+    merged_df.loc[(merged_df["_merge"] == "left_only") & (merged_df["status_df1"] == STATUS_INCORRECT), new_status_column] = STATUS_VALID_DROP
+
+    # Drop helper columns
+    merged_df.drop(columns=["_merge"], inplace=True, errors="ignore")
+
+    # Save the updated file
+    merged_df.to_excel(output_path, index=False)
+    print(f"✅ Updated Excel saved as: {output_path}")
+
+except FileNotFoundError as e:
+    print(f"❌ Error: {e}")
+
+except ValueError as e:
+    print(f"❌ Error: {e}")
+
+except Exception as e:
+    print(f"❌ An unexpected error occurred: {e}")
