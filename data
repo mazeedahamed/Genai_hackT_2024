@@ -1,86 +1,55 @@
-import pandas as pd
-import os
-
-# === CONFIGURATION ===
-excel1_path = "excel1.xlsx"
-excel2_path = "excel2.xlsx"
-output_path = "excel1.xlsx"  # Overwrite existing Excel1
-sheet1_name = "sheet1"
-summary_sheet_name = "summary"
-
-# Columns for comparison
-columns_to_compare = ["Transactionid", "number", "name", "type", "country"]
-status_column = "status"
-new_status_column = "new_status"
-
-STATUS_NEW_PARTY = "New Party Incorrect"
-
 try:
     # Check if files exist
     if not os.path.exists(excel1_path) or not os.path.exists(excel2_path):
         raise FileNotFoundError("One or both Excel files are missing!")
 
-    # Load existing Excel1 with all sheets
-    with pd.ExcelFile(excel1_path) as xls:
-        all_sheets = {sheet: pd.read_excel(xls, sheet_name=sheet, dtype=str) for sheet in xls.sheet_names}
-
-    # Load existing sheet1 from Excel1
-    sheet1_df = all_sheets.get(sheet1_name)
-    if sheet1_df is None:
-        raise ValueError(f"Sheet '{sheet1_name}' not found in {excel1_path}!")
-
-    # Load Excel2 (new updates)
-    df2 = pd.read_excel(excel2_path, sheet_name=sheet1_name, dtype=str)
+    # Load existing Excel1 file
+    sheet1_df = pd.read_excel(excel1_path, sheet_name=sheet_name, dtype=str)
+    
+    # Load Excel2 file
+    df2 = pd.read_excel(excel2_path, sheet_name=sheet_name, dtype=str)
 
     # Ensure all required columns exist
     required_columns = set(columns_to_compare + [status_column])
-    if not required_columns.issubset(sheet1_df.columns) or not required_columns.issubset(df2.columns):
-        raise ValueError("Missing required columns in either Excel1 or Excel2!")
+    if not required_columns.issubset(set(sheet1_df.columns)) or not required_columns.issubset(set(df2.columns)):
+        raise ValueError("Missing required columns in either df1 or df2")
 
-    # Assign occurrence numbers (for duplicate tracking)
+    # Assign occurrence numbers
     sheet1_df['occurrence'] = sheet1_df.groupby(columns_to_compare).cumcount() + 1
     df2['occurrence'] = df2.groupby(columns_to_compare).cumcount() + 1
 
-    # Merge data based on columns + occurrence
+    # Merge DataFrames
     merged_df = sheet1_df.merge(df2, on=columns_to_compare + ['occurrence'], how="outer", suffixes=("_df1", "_df2"), indicator=True)
 
-    # Drop unnecessary merge column
+    # Drop unnecessary columns
     merged_df.drop(columns=["_merge"], inplace=True, errors="ignore")
 
-    # Create a new column 'new_status' instead of replacing 'status'
-    sheet1_df = sheet1_df.merge(
+    # Update existing rows in sheet1
+    sheet1_updated = sheet1_df.merge(
         merged_df[[*columns_to_compare, "occurrence", new_status_column]],
         on=[*columns_to_compare, "occurrence"],
         how="left"
     )
 
-    # Fill missing values in 'new_status' to keep original values intact
-    sheet1_df[new_status_column] = sheet1_df[new_status_column].fillna("")
+    # Replace original status column with updated new_status
+    sheet1_updated[status_column] = sheet1_updated[new_status_column]
+    sheet1_updated.drop(columns=[new_status_column], inplace=True)
 
     # Extract and append "New Party Incorrect" rows
     new_party_rows = merged_df[merged_df[new_status_column] == STATUS_NEW_PARTY].drop(columns=["status_df1"], errors="ignore")
-    sheet1_final = pd.concat([sheet1_df, new_party_rows], ignore_index=True)
+    sheet1_final = pd.concat([sheet1_updated, new_party_rows], ignore_index=True)
 
-    # === Generate Summary Data ===
-    summary_data = {
-        "Total Rows in Original Sheet1": [len(sheet1_df)],
-        "Total Updates in Sheet1": [(sheet1_df[new_status_column] != "").sum()],
-        "Total 'New Party Incorrect' Rows Added": [len(new_party_rows)]
-    }
-    summary_df = pd.DataFrame(summary_data)
+    # Generate summary
+    summary_df = generate_summary(merged_df, comment_groups)
+    summary_sheet_name = f"Summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-    # Save to Excel1, keeping all other sheets intact
-    with pd.ExcelWriter(output_path, engine="xlsxwriter") as writer:
-        for sheet, df in all_sheets.items():
-            if sheet == sheet1_name:
-                sheet1_final.to_excel(writer, sheet_name=sheet, index=False)  # Update only sheet1
-            else:
-                df.to_excel(writer, sheet_name=sheet, index=False)  # Keep other sheets unchanged
+    # Save updated sheet1 back to Excel
+    sheet1_final.to_excel(output_path, sheet_name=sheet_name, index=False, mode='a', if_sheet_exists='replace')
 
-        # Add the summary sheet
-        summary_df.to_excel(writer, sheet_name=summary_sheet_name, index=False)
+    # Save summary sheet
+    summary_df.to_excel(output_path, sheet_name=summary_sheet_name, index=False, mode='a', if_sheet_exists='replace')
 
-    print("✅ Excel updated successfully! 'new_status' column added, 'New Party Incorrect' rows appended, and summary sheet created.")
+    print("✅ Excel updated successfully!")
 
 except FileNotFoundError as e:
     print(f"❌ Error: {e}")
