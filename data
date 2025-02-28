@@ -1,26 +1,32 @@
-# Count occurrences per unique transaction in both DataFrames
-    df1_occurrences = df1.groupby(columns_to_compare).size().reset_index(name="df1_count")
-    df2_occurrences = df2.groupby(columns_to_compare).size().reset_index(name="df2_count")
+    # Assign occurrence numbers correctly
+    df1['df1_count'] = df1.groupby(columns_to_compare).cumcount() + 1
+    df2['df2_count'] = df2.groupby(columns_to_compare).cumcount() + 1
     
-    # Merge occurrence counts into merged_df
-    merged_df = merged_df.merge(df1_occurrences, on=columns_to_compare, how="left")
-    merged_df = merged_df.merge(df2_occurrences, on=columns_to_compare, how="left")
-
-    merged_df["df1_count"].fillna(0, inplace=True)
-    merged_df["df2_count"].fillna(0, inplace=True)
-
-    # Assign status based on merging result and occurrence counts
-    def assign_status(row):
+    df1.rename(columns={status_column: "status_df1"}, inplace=True)
+    df2.rename(columns={status_column: "status_df2"}, inplace=True)
+    
+    # Merge both DataFrames on key columns
+    merged_df = df1.merge(df2, on=columns_to_compare, how="outer", suffixes=("_df1", "_df2"), indicator=True)
+    
+    # Initialize new_status column
+    merged_df[new_status_column] = ""
+    
+    # Assign status based on merging result
+    def determine_new_status(row):
         if row["_merge"] == "left_only":
             if row["df1_count"] > row["df2_count"]:
                 return "missing" if row["status_df1"] in ["correct", "incomplete"] else "valid drop"
         elif row["_merge"] == "right_only":
             return "new incorrect"
-        return row[new_status_column]
-
-    merged_df[new_status_column] = merged_df.apply(assign_status, axis=1)
-
-    # Drop helper columns
-    merged_df.drop(columns=["_merge", "df1_count", "df2_count"], inplace=True, errors="ignore")
+        return row["status_df1"]
     
-    return merged_df
+    merged_df[new_status_column] = merged_df.apply(determine_new_status, axis=1)
+    
+    # Handle extra occurrences in excel2
+    extra_rows = merged_df[merged_df["_merge"] == "right_only"]
+    extra_rows[new_status_column] = "new incorrect"
+    merged_df = pd.concat([merged_df, extra_rows], ignore_index=True)
+    
+    # Drop helper column
+    merged_df.drop(columns=["_merge"], inplace=True, errors="ignore")
+    
