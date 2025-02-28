@@ -1,89 +1,86 @@
 import pandas as pd
 import os
-from datetime import datetime
 
 # === CONFIGURATION ===
 excel1_path = "excel1.xlsx"
 excel2_path = "excel2.xlsx"
-sheet_name = "sheet1"
+output_path = "excel1.xlsx"  # Overwrite existing Excel1
+sheet1_name = "sheet1"
+summary_sheet_name = "summary"
 
 # Columns for comparison
 columns_to_compare = ["Transactionid", "number", "name", "type", "country"]
 status_column = "status"
 new_status_column = "new_status"
 
-# Status labels
-STATUS_CORRECT = "Correct and complete"
-STATUS_INCOMPLETE = "Incomplete"
-STATUS_INCORRECT = "Incorrect"
 STATUS_NEW_PARTY = "New Party Incorrect"
-STATUS_VALID_DROP = "Valid Drop"
-STATUS_MISSING = "Missing"
 
 try:
     # Check if files exist
     if not os.path.exists(excel1_path) or not os.path.exists(excel2_path):
         raise FileNotFoundError("One or both Excel files are missing!")
 
-    # Load the full Excel1 workbook with all sheets
-    excel1_sheets = pd.read_excel(excel1_path, sheet_name=None, dtype=str)
+    # Load existing Excel1 with all sheets
+    with pd.ExcelFile(excel1_path) as xls:
+        all_sheets = {sheet: pd.read_excel(xls, sheet_name=sheet, dtype=str) for sheet in xls.sheet_names}
 
-    # Load only sheet1 from both files
-    df1 = excel1_sheets[sheet_name]
-    df2 = pd.read_excel(excel2_path, sheet_name=sheet_name, dtype=str)
+    # Load existing sheet1 from Excel1
+    sheet1_df = all_sheets.get(sheet1_name)
+    if sheet1_df is None:
+        raise ValueError(f"Sheet '{sheet1_name}' not found in {excel1_path}!")
+
+    # Load Excel2 (new updates)
+    df2 = pd.read_excel(excel2_path, sheet_name=sheet1_name, dtype=str)
 
     # Ensure all required columns exist
     required_columns = set(columns_to_compare + [status_column])
-    missing_columns_df1 = required_columns - set(df1.columns)
-    missing_columns_df2 = required_columns - set(df2.columns)
+    if not required_columns.issubset(sheet1_df.columns) or not required_columns.issubset(df2.columns):
+        raise ValueError("Missing required columns in either Excel1 or Excel2!")
 
-    if missing_columns_df1 or missing_columns_df2:
-        raise ValueError(f"Missing columns: {missing_columns_df1} in df1, {missing_columns_df2} in df2")
-
-    # Assign occurrence numbers
-    df1['occurrence'] = df1.groupby(columns_to_compare).cumcount() + 1
+    # Assign occurrence numbers (for duplicate tracking)
+    sheet1_df['occurrence'] = sheet1_df.groupby(columns_to_compare).cumcount() + 1
     df2['occurrence'] = df2.groupby(columns_to_compare).cumcount() + 1
 
-    # Merge both DataFrames on key columns and occurrences
-    merged_df = df1.merge(df2, on=columns_to_compare + ['occurrence'], how="outer", suffixes=("_df1", "_df2"), indicator=True)
+    # Merge data based on columns + occurrence
+    merged_df = sheet1_df.merge(df2, on=columns_to_compare + ['occurrence'], how="outer", suffixes=("_df1", "_df2"), indicator=True)
 
-    # Initialize new_status column with the existing status from df1
-    merged_df[new_status_column] = merged_df.get("status_df1", "")
-
-    # Vectorized status assignment
-    merged_df.loc[merged_df["_merge"] == "right_only", new_status_column] = STATUS_NEW_PARTY
-    merged_df.loc[(merged_df["_merge"] == "left_only") & merged_df["status_df1"].isin([STATUS_CORRECT, STATUS_INCOMPLETE]), new_status_column] = STATUS_MISSING
-    merged_df.loc[(merged_df["_merge"] == "left_only") & (merged_df["status_df1"] == STATUS_INCORRECT), new_status_column] = STATUS_VALID_DROP
-
-    # Drop unnecessary columns
+    # Drop unnecessary merge column
     merged_df.drop(columns=["_merge"], inplace=True, errors="ignore")
 
-    # Update existing rows in df1 with new_status
-    df1_updated = df1.merge(
+    # Create a new column 'new_status' instead of replacing 'status'
+    sheet1_df = sheet1_df.merge(
         merged_df[[*columns_to_compare, "occurrence", new_status_column]],
         on=[*columns_to_compare, "occurrence"],
         how="left"
     )
 
-    # Replace original status column with updated new_status
-    df1_updated[status_column] = df1_updated[new_status_column]
-    df1_updated.drop(columns=[new_status_column], inplace=True)
+    # Fill missing values in 'new_status' to keep original values intact
+    sheet1_df[new_status_column] = sheet1_df[new_status_column].fillna("")
 
-    # Extract only the "New Party Incorrect" rows to be appended
+    # Extract and append "New Party Incorrect" rows
     new_party_rows = merged_df[merged_df[new_status_column] == STATUS_NEW_PARTY].drop(columns=["status_df1"], errors="ignore")
+    sheet1_final = pd.concat([sheet1_df, new_party_rows], ignore_index=True)
 
-    # Append "New Party Incorrect" rows
-    df1_final = pd.concat([df1_updated, new_party_rows], ignore_index=True)
+    # === Generate Summary Data ===
+    summary_data = {
+        "Total Rows in Original Sheet1": [len(sheet1_df)],
+        "Total Updates in Sheet1": [(sheet1_df[new_status_column] != "").sum()],
+        "Total 'New Party Incorrect' Rows Added": [len(new_party_rows)]
+    }
+    summary_df = pd.DataFrame(summary_data)
 
-    # Save back to the same Excel file with all original sheets intact
-    with pd.ExcelWriter(excel1_path, engine="xlsxwriter") as writer:
-        for sheet, data in excel1_sheets.items():
-            if sheet == sheet_name:
-                df1_final.to_excel(writer, sheet_name=sheet, index=False)  # Update sheet1
+    # Save to Excel1, keeping all other sheets intact
+    with pd.ExcelWriter(output_path, engine="xlsxwriter") as writer:
+        for sheet, df in all_sheets.items():
+            if sheet == sheet1_name:
+                sheet1_final.to_excel(writer, sheet_name=sheet, index=False)  # Update only sheet1
             else:
-                data.to_excel(writer, sheet_name=sheet, index=False)  # Keep other sheets unchanged
+                df.to_excel(writer, sheet_name=sheet, index=False)  # Keep other sheets unchanged
 
-    print("✅ Excel file updated successfully!")
+        # Add the summary sheet
+        summary_df.to_excel(writer, sheet_name=summary_sheet_name, index=False)
+
+    print("✅ Excel updated successfully! 'new_status' column added, 'New Party Incorrect' rows appended, and summary sheet created.")
 
 except FileNotFoundError as e:
     print(f"❌ Error: {e}")
