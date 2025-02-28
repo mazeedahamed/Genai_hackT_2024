@@ -1,100 +1,95 @@
 import pandas as pd
+import os
 from datetime import datetime
 
-# 🟢 Define file paths & sheet names
-excel1_path = 'path_to_excel1.xlsx'  # 🔹 Path to Excel1
-excel2_path = 'path_to_excel2.xlsx'  # 🔹 Path to Excel2
-output_path = 'updated_excel1.xlsx'  # 🔹 Output file name
+# === CONFIGURATION ===
+excel1_path = "excel1.xlsx"
+excel2_path = "excel2.xlsx"
+sheet_name = "sheet1"
 
-sheet1_name = 'Sheet1'  # 🔹 Sheet name in Excel1
-sheet2_name = 'Sheet2'  # 🔹 Sheet name in Excel2
+# Columns for comparison
+columns_to_compare = ["Transactionid", "number", "name", "type", "country"]
+status_column = "status"
+new_status_column = "new_status"
 
-# 🟢 Column mappings
-id_col1 = 'ID'              # 🔹 ID column in Excel1
-account_col = 'account_id'  # 🔹 Account ID for grouping
-status_col1 = 'Status'      # 🔹 Status column in Excel1
-status_col2 = 'Status'      # 🔹 Status column in Excel2
-comments_col = 'Comments'   # 🔹 Column for additional filtering
-new_status_col = 'Status_excel2'  # 🔹 New column for updated status
+# Status labels
+STATUS_CORRECT = "Correct and complete"
+STATUS_INCOMPLETE = "Incomplete"
+STATUS_INCORRECT = "Incorrect"
+STATUS_NEW_PARTY = "New Party Incorrect"
+STATUS_VALID_DROP = "Valid Drop"
+STATUS_MISSING = "Missing"
 
-# 🟢 Columns to concatenate in Excel2 for generating 'ID'
-id_parts = ['TransactionID', 'Name', 'Submitter']
+try:
+    # Check if files exist
+    if not os.path.exists(excel1_path) or not os.path.exists(excel2_path):
+        raise FileNotFoundError("One or both Excel files are missing!")
 
-# 🟢 Load Excel files
-excel1 = pd.read_excel(excel1_path, sheet_name=sheet1_name)
-excel2 = pd.read_excel(excel2_path, sheet_name=sheet2_name)
+    # Load the full Excel1 workbook with all sheets
+    excel1_sheets = pd.read_excel(excel1_path, sheet_name=None, dtype=str)
 
-# 🟢 Trim whitespace from Excel1 ID column
-excel1[id_col1] = excel1[id_col1].astype(str).str.strip()
+    # Load only sheet1 from both files
+    df1 = excel1_sheets[sheet_name]
+    df2 = pd.read_excel(excel2_path, sheet_name=sheet_name, dtype=str)
 
-# 🟢 Create ID column in Excel2 by combining three columns
-excel2[id_col1] = excel2[id_parts].astype(str).apply(lambda row: '-'.join(row), axis=1)
+    # Ensure all required columns exist
+    required_columns = set(columns_to_compare + [status_column])
+    missing_columns_df1 = required_columns - set(df1.columns)
+    missing_columns_df2 = required_columns - set(df2.columns)
 
-# 🟢 Trim whitespace from newly created ID in Excel2
-excel2[id_col1] = excel2[id_col1].str.strip()
+    if missing_columns_df1 or missing_columns_df2:
+        raise ValueError(f"Missing columns: {missing_columns_df1} in df1, {missing_columns_df2} in df2")
 
-# 🟢 Handle duplicate statuses in Excel2
-excel2[status_col2] = excel2.groupby(id_col1)[status_col2].transform(lambda x: x.mask(x.duplicated(keep='first'), 'Duplicate-' + x))
+    # Assign occurrence numbers
+    df1['occurrence'] = df1.groupby(columns_to_compare).cumcount() + 1
+    df2['occurrence'] = df2.groupby(columns_to_compare).cumcount() + 1
 
-# 🟢 Merge Excel1 with Excel2 based on ID
-merged = pd.merge(excel1, excel2[[id_col1, status_col2, comments_col]], on=id_col1, how='left')
+    # Merge both DataFrames on key columns and occurrences
+    merged_df = df1.merge(df2, on=columns_to_compare + ['occurrence'], how="outer", suffixes=("_df1", "_df2"), indicator=True)
 
-# 🟢 Add new status column to Excel1's structure
-merged[new_status_col] = merged[status_col2].fillna('Missing')
+    # Initialize new_status column with the existing status from df1
+    merged_df[new_status_column] = merged_df.get("status_df1", "")
 
-# 🟢 Drop the temporary column from Excel2
-merged.drop(columns=[status_col2], inplace=True)
+    # Vectorized status assignment
+    merged_df.loc[merged_df["_merge"] == "right_only", new_status_column] = STATUS_NEW_PARTY
+    merged_df.loc[(merged_df["_merge"] == "left_only") & merged_df["status_df1"].isin([STATUS_CORRECT, STATUS_INCOMPLETE]), new_status_column] = STATUS_MISSING
+    merged_df.loc[(merged_df["_merge"] == "left_only") & (merged_df["status_df1"] == STATUS_INCORRECT), new_status_column] = STATUS_VALID_DROP
 
-# 🟢 Identify IDs from Excel2 that are **not in Excel1** (Additional Records)
-additional_records = excel2[~excel2[id_col1].isin(excel1[id_col1])].copy()
+    # Drop unnecessary columns
+    merged_df.drop(columns=["_merge"], inplace=True, errors="ignore")
 
-if not additional_records.empty:
-    additional_records[new_status_col] = additional_records[status_col2] + ' - Additional'
-    additional_records.drop(columns=[status_col2], inplace=True)
+    # Update existing rows in df1 with new_status
+    df1_updated = df1.merge(
+        merged_df[[*columns_to_compare, "occurrence", new_status_column]],
+        on=[*columns_to_compare, "occurrence"],
+        how="left"
+    )
 
-    # 🟢 Add missing columns to match Excel1 structure
-    for col in excel1.columns:
-        if col not in additional_records:
-            additional_records[col] = None  # Fill missing columns with NaN
+    # Replace original status column with updated new_status
+    df1_updated[status_column] = df1_updated[new_status_column]
+    df1_updated.drop(columns=[new_status_column], inplace=True)
 
-    # 🟢 Arrange columns in the same order as Excel1 + new status column
-    additional_records = additional_records[excel1.columns.tolist() + [new_status_col]]
+    # Extract only the "New Party Incorrect" rows to be appended
+    new_party_rows = merged_df[merged_df[new_status_column] == STATUS_NEW_PARTY].drop(columns=["status_df1"], errors="ignore")
 
-    # 🟢 Append additional records to the final dataset
-    merged = pd.concat([merged, additional_records], ignore_index=True)
+    # Append "New Party Incorrect" rows
+    df1_final = pd.concat([df1_updated, new_party_rows], ignore_index=True)
 
-# 🟢 Generate Summary DataFrame
-def generate_summary(df):
-    """
-    Generates a summary with columns: Account, Correct, Incorrect, Client of Clients, DP.
-    """
-    summary = df.groupby(account_col)[new_status_col].value_counts().unstack(fill_value=0).reset_index()
+    # Save back to the same Excel file with all original sheets intact
+    with pd.ExcelWriter(excel1_path, engine="xlsxwriter") as writer:
+        for sheet, data in excel1_sheets.items():
+            if sheet == sheet_name:
+                df1_final.to_excel(writer, sheet_name=sheet, index=False)  # Update sheet1
+            else:
+                data.to_excel(writer, sheet_name=sheet, index=False)  # Keep other sheets unchanged
 
-    # 🟢 Ensure 'Correct' and 'Incorrect' columns exist
-    summary['Correct'] = summary.get('Correct', 0)
-    summary['Incorrect'] = summary.get('Incorrect', 0)
+    print("✅ Excel file updated successfully!")
 
-    # 🟢 Identify 'Client of Clients' and 'DP' in Incorrect Status
-    incorrect_df = df[df[new_status_col].str.contains('Incorrect', na=False)]
-    
-    client_of_clients_count = incorrect_df[incorrect_df[comments_col].str.contains('Client of Clients', na=False)].groupby(account_col).size()
-    dp_count = incorrect_df[incorrect_df[comments_col].str.contains('DP', na=False)].groupby(account_col).size()
+except FileNotFoundError as e:
+    print(f"❌ Error: {e}")
 
-    # 🟢 Add these counts to summary
-    summary['Client of Clients'] = summary[account_col].map(client_of_clients_count).fillna(0).astype(int)
-    summary['DP'] = summary[account_col].map(dp_count).fillna(0).astype(int)
+except ValueError as e:
+    print(f"❌ Error: {e}")
 
-    # 🟢 Select relevant columns
-    summary = summary[[account_col, 'Correct', 'Incorrect', 'Client of Clients', 'DP']]
-    
-    return summary
-
-# 🟢 Create summary sheet name
-summary_sheet_name = f"Summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-
-# 🟢 Save the final data to a new Excel file
-with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-    merged.to_excel(writer, sheet_name=sheet1_name, index=False)  # ✅ Update existing sheet
-    generate_summary(merged).to_excel(writer, sheet_name=summary_sheet_name, index=False)  # ✅ Write summary in new sheet
-
-print(f"✅ Excel file '{output_path}' updated successfully with new column '{new_status_col}' and summary in sheet '{summary_sheet_name}'!")
+except Exception as e:
+    print(f"❌ An unexpected error occurred: {e}")
