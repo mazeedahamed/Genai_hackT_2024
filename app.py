@@ -180,3 +180,13 @@ with pd.ExcelWriter(output_path, engine="xlsxwriter") as writer:
 
 print("✅ Excel updated successfully with all sheets!")
 
+
+--------
+
+
+summary_df = manually_df.groupby("account id").agg(
+        total_parties=pd.NamedAgg(column="Transactionid", aggfunc="count"),
+        correctly_identified=pd.NamedAgg(column="new_status", aggfunc=lambda x: (x == "correctly identified").sum()),
+        missing_parties=pd.NamedAgg(column="new_status", aggfunc=lambda x: (x == "missing").sum()),
+    ).reset_index()
+
