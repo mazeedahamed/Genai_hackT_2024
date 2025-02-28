@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 
-# Define the required columns for comparison
+# Define column names
 columns_to_compare = ['TransactionId', 'Account ID', 'Party Name', 'Type', 'Country']
 status_column = 'status'  # Column storing status in df1
 new_status_column = 'updated_status'  # New column for updated status
@@ -34,7 +34,7 @@ try:
     # Count occurrences of each df1 row in df2
     df2["count_in_df2"] = df2.groupby(columns_to_compare)[columns_to_compare[0]].transform('count')
 
-    # **Step 1: Check how many times each row from df1 appears in df2**
+    # **Step 1: Check occurrences for df1 rows in df2**
     def get_occurrences(row):
         return df2[(df2[columns_to_compare] == row[columns_to_compare]).all(axis=1)]["count_in_df2"].max() or 0
 
@@ -62,12 +62,22 @@ try:
                 new_row[new_status_column] = STATUS_NEW_INCORRECT
                 new_rows.append(new_row)
 
+    # **Step 4: Add rows that are present in df2 but missing in df1**
+    df1_existing_set = set(df1[columns_to_compare].apply(tuple, axis=1))  # Convert df1 rows to tuples for easy lookup
+    for _, row in df2.iterrows():
+        row_tuple = tuple(row[columns_to_compare])
+        if row_tuple not in df1_existing_set:
+            new_row = row[columns_to_compare].to_dict()
+            new_row[status_column] = STATUS_NEW_INCORRECT
+            new_row[new_status_column] = STATUS_NEW_INCORRECT
+            new_rows.append(new_row)
+
     # Convert new rows into DataFrame and append to df1
     if new_rows:
         df1 = pd.concat([df1, pd.DataFrame(new_rows)], ignore_index=True)
 
     # Drop helper columns
-    df1.drop(columns=["occurrences_in_df2"], inplace=True)
+    df1.drop(columns=["occurrences_in_df2"], inplace=True, errors="ignore")
 
     # Save updated df1 back to Excel
     df1.to_excel("Updated_Excel1.xlsx", index=False)
