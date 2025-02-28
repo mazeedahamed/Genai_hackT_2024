@@ -57,3 +57,58 @@ def generate_summary(df, comment_groups):
     with pd.ExcelWriter(output_path, engine="xlsxwriter") as writer:
         merged_df.to_excel(writer, sheet_name="Updated Data", index=False)
         summary_df.to_excel(writer, sheet_name=summary_sheet_name, index=False)
+
+
+
+
+
+
+===================
+
+
+import pandas as pd
+
+def update_manual_status(excel1_path, excel2_path, sheet_name="manually_added"):
+    """
+    Reads the 'manually_added' sheet from excel1, compares rows with excel2,
+    and adds a 'new_status' column based on presence in excel2.
+    
+    Parameters:
+    - excel1_path (str): Path to the first Excel file (with manually added sheet)
+    - excel2_path (str): Path to the second Excel file (comparison file)
+    - sheet_name (str): Name of the sheet in excel1 that contains manually added data
+
+    Returns:
+    - pd.DataFrame: Updated DataFrame with all original columns + 'new_status'
+    """
+    # Load manually added sheet
+    manually_df = pd.read_excel(excel1_path, sheet_name=sheet_name, dtype=str)
+
+    # Load excel2 data for comparison
+    excel2_df = pd.read_excel(excel2_path, dtype=str)
+
+    # Define comparison columns
+    compare_cols = ["Transactionid", "number", "name", "type", "country"]
+
+    # Perform comparison and set new_status
+    manually_df["new_status"] = manually_df[compare_cols].apply(
+        lambda row: "correctly identified" if row.tolist() in excel2_df[compare_cols].values.tolist() else "missing",
+        axis=1
+    )
+
+    return manually_df  # Returning the updated DataFrame
+
+
+
+manually_df = update_manual_status(excel1_path, excel2_path)
+
+# Save all sheets, including the updated manually added data
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+summary_sheet_name = f"Summary_{timestamp}"
+
+with pd.ExcelWriter(output_path, engine="xlsxwriter") as writer:
+    merged_df.to_excel(writer, sheet_name="Updated Data", index=False)
+    summary_df.to_excel(writer, sheet_name=summary_sheet_name, index=False)
+    
+    # Write updated 'manually_added' sheet
+    manually_df.to_excel(writer, sheet_name="manually_added", index=False)
