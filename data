@@ -1,61 +1,78 @@
+import os
+import pandas as pd
+
+# Define the required columns for comparison
+columns_to_compare = ['TransactionId', 'Account ID', 'Party Name', 'Type', 'Country']
+status_column = 'status'  # Column storing status in df1
+new_status_column = 'updated_status'  # New column for updated status
+
+# Status mapping
+STATUS_MISSING = "Missing"
+STATUS_VALID_DROP = "Valid Drop"
+STATUS_NEW_INCORRECT = "New Incorrect"
+
 try:
     # Check if files exist
     if not os.path.exists(excel1_path) or not os.path.exists(excel2_path):
         raise FileNotFoundError("One or both Excel files are missing!")
 
-    # Load existing Excel1 file
-    sheet1_df = pd.read_excel(excel1_path, sheet_name=sheet_name, dtype=str)
-    
-    # Load Excel2 file
-    df2 = pd.read_excel(excel2_path, sheet_name=sheet_name, dtype=str)
+    # Load Excel files
+    df1 = pd.read_excel(excel1_path, dtype=str)
+    df2 = pd.read_excel(excel2_path, dtype=str)
 
-    # Ensure all required columns exist
+    # Ensure required columns exist in both dataframes
     required_columns = set(columns_to_compare + [status_column])
-    if not required_columns.issubset(set(sheet1_df.columns)) or not required_columns.issubset(set(df2.columns)):
-        raise ValueError("Missing required columns in either df1 or df2")
+    missing_columns_df1 = required_columns - set(df1.columns)
+    missing_columns_df2 = required_columns - set(df2.columns)
 
-    # Assign occurrence numbers
-    sheet1_df['occurrence'] = sheet1_df.groupby(columns_to_compare).cumcount() + 1
-    df2['occurrence'] = df2.groupby(columns_to_compare).cumcount() + 1
+    if missing_columns_df1 or missing_columns_df2:
+        raise ValueError(f"Missing columns: {missing_columns_df1} in df1, {missing_columns_df2} in df2")
 
-    # Merge DataFrames
-    merged_df = sheet1_df.merge(df2, on=columns_to_compare + ['occurrence'], how="outer", suffixes=("_df1", "_df2"), indicator=True)
+    df1.fillna("NA", inplace=True)
+    df2.fillna("NA", inplace=True)
 
-    # Drop unnecessary columns
-    merged_df.drop(columns=["_merge"], inplace=True, errors="ignore")
+    # Count occurrences of each df1 row in df2
+    df2["count_in_df2"] = df2.groupby(columns_to_compare)[columns_to_compare[0]].transform('count')
 
-    # Update existing rows in sheet1
-    sheet1_updated = sheet1_df.merge(
-        merged_df[[*columns_to_compare, "occurrence", new_status_column]],
-        on=[*columns_to_compare, "occurrence"],
-        how="left"
-    )
+    # **Step 1: Check how many times each row from df1 appears in df2**
+    def get_occurrences(row):
+        return df2[(df2[columns_to_compare] == row[columns_to_compare]).all(axis=1)]["count_in_df2"].max() or 0
 
-    # Replace original status column with updated new_status
-    sheet1_updated[status_column] = sheet1_updated[new_status_column]
-    sheet1_updated.drop(columns=[new_status_column], inplace=True)
+    df1["occurrences_in_df2"] = df1.apply(get_occurrences, axis=1)
 
-    # Extract and append "New Party Incorrect" rows
-    new_party_rows = merged_df[merged_df[new_status_column] == STATUS_NEW_PARTY].drop(columns=["status_df1"], errors="ignore")
-    sheet1_final = pd.concat([sheet1_updated, new_party_rows], ignore_index=True)
+    # **Step 2: Update status in df1 based on occurrences**
+    def update_status(row):
+        if row["occurrences_in_df2"] == 0:
+            if row[status_column] in ["Correct", "Incomplete"]:
+                return STATUS_MISSING
+            elif row[status_column] == "Incorrect":
+                return STATUS_VALID_DROP
+        return row[status_column]  # Keep status if at least one match exists
 
-    # Generate summary
-    summary_df = generate_summary(merged_df, comment_groups)
-    summary_sheet_name = f"Summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    df1[new_status_column] = df1.apply(update_status, axis=1)
 
-    # Save updated sheet1 back to Excel
-    sheet1_final.to_excel(output_path, sheet_name=sheet_name, index=False, mode='a', if_sheet_exists='replace')
+    # **Step 3: Append new rows for multiple occurrences**
+    new_rows = []
+    for _, row in df1.iterrows():
+        occurrences = row["occurrences_in_df2"]
+        if occurrences > 1:
+            for _ in range(occurrences - 1):  # Append (occurrences - 1) new rows
+                new_row = row[columns_to_compare].to_dict()
+                new_row[status_column] = STATUS_NEW_INCORRECT
+                new_row[new_status_column] = STATUS_NEW_INCORRECT
+                new_rows.append(new_row)
 
-    # Save summary sheet
-    summary_df.to_excel(output_path, sheet_name=summary_sheet_name, index=False, mode='a', if_sheet_exists='replace')
+    # Convert new rows into DataFrame and append to df1
+    if new_rows:
+        df1 = pd.concat([df1, pd.DataFrame(new_rows)], ignore_index=True)
 
-    print("✅ Excel updated successfully!")
+    # Drop helper columns
+    df1.drop(columns=["occurrences_in_df2"], inplace=True)
 
-except FileNotFoundError as e:
-    print(f"❌ Error: {e}")
+    # Save updated df1 back to Excel
+    df1.to_excel("Updated_Excel1.xlsx", index=False)
 
-except ValueError as e:
-    print(f"❌ Error: {e}")
+    print("Comparison and update completed. Updated file saved as 'Updated_Excel1.xlsx'.")
 
 except Exception as e:
-    print(f"❌ An unexpected error occurred: {e}")
+    print(f"Error: {e}")
