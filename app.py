@@ -112,3 +112,71 @@ with pd.ExcelWriter(output_path, engine="xlsxwriter") as writer:
     
     # Write updated 'manually_added' sheet
     manually_df.to_excel(writer, sheet_name="manually_added", index=False)
+
+
+
+=================
+
+
+import pandas as pd
+
+def generate_manual_summary(manually_df, category_filters=None, source_filters=None):
+    """
+    Generates a summary report from the manually added DataFrame.
+    
+    Parameters:
+    - manually_df (pd.DataFrame): Data from 'manually_added' sheet.
+    - category_filters (dict): Dictionary of category names and their headers. 
+                               Example: {"direct party": "Direct Party", "another category": "Another Header"}
+    - source_filters (dict): Dictionary of source names and their headers.
+                             Example: {"[Sow Document]": "Sow Doc", "[Edd Questionier]": "EDDQ"}
+
+    Returns:
+    - pd.DataFrame: Summary DataFrame aggregated at the 'account id' level.
+    """
+    # Default category filters if none provided
+    if category_filters is None:
+        category_filters = {"direct party": "Direct Party"}  # Add more as needed
+
+    # Default source filters if none provided
+    if source_filters is None:
+        source_filters = {"[Sow Document]": "Sow Doc", "[Edd Questionier]": "EDDQ"}
+
+    # Group by 'account id' to count total parties
+    summary_df = manually_df.groupby("account id").size().reset_index(name="Total Parties")
+
+    # Add source-based counts
+    for source_value, header_name in source_filters.items():
+        source_count = manually_df[manually_df["source"] == source_value].groupby("account id").size().reset_index(name=header_name)
+        summary_df = summary_df.merge(source_count, on="account id", how="left")
+
+    # Add category-based counts
+    for category_value, header_name in category_filters.items():
+        category_count = manually_df[manually_df["category"] == category_value].groupby("account id").size().reset_index(name=header_name)
+        summary_df = summary_df.merge(category_count, on="account id", how="left")
+
+    # Fill NaN values with 0 since merge might result in NaNs for missing categories/sources
+    summary_df.fillna(0, inplace=True)
+
+    return summary_df  # Returning the summary DataFrame
+
+
+=====
+
+
+# Generate manual summary
+manual_summary_df = generate_manual_summary(manually_df)
+
+# Save all sheets, including the manual summary
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+summary_sheet_name = f"Summary_{timestamp}"
+manual_summary_sheet = f"manual_summary_{timestamp}"
+
+with pd.ExcelWriter(output_path, engine="xlsxwriter") as writer:
+    merged_df.to_excel(writer, sheet_name="Updated Data", index=False)
+    summary_df.to_excel(writer, sheet_name=summary_sheet_name, index=False)
+    manually_df.to_excel(writer, sheet_name="manually_added", index=False)
+    manual_summary_df.to_excel(writer, sheet_name=manual_summary_sheet, index=False)
+
+print("✅ Excel updated successfully with all sheets!")
+
