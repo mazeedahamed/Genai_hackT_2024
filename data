@@ -1,3 +1,38 @@
+import os
+import pandas as pd
+
+def preprocess_transaction_id(df):
+    # Add any preprocessing logic needed for transaction ID
+    return df
+
+def trim_all_string_columns(df):
+    return df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+
+def compare_excels(excel1_path, excel2_path, sheet_name_excel1, sheet_name_excel2, columns_to_compare, status_column, new_status_column):
+    # Check if files exist
+    if not os.path.exists(excel1_path) or not os.path.exists(excel2_path):
+        raise FileNotFoundError("One or both Excel files are missing!")
+    
+    # Load Excel files
+    df1 = pd.read_excel(excel1_path, sheet_name=sheet_name_excel1, dtype=str)
+    df1 = preprocess_transaction_id(df1)
+    df1 = trim_all_string_columns(df1)
+    
+    df2 = pd.read_excel(excel2_path, sheet_name=sheet_name_excel2, dtype=str)
+    df2 = preprocess_transaction_id(df2)
+    df2 = trim_all_string_columns(df2)
+    
+    # Ensure required columns exist
+    required_columns = set(columns_to_compare + [status_column])
+    missing_columns_df1 = required_columns - set(df1.columns)
+    missing_columns_df2 = required_columns - set(df2.columns)
+    
+    if missing_columns_df1 or missing_columns_df2:
+        raise ValueError(f"Missing columns: {missing_columns_df1} in df1, {missing_columns_df2} in df2")
+    
+    df1.fillna("NA", inplace=True)
+    df2.fillna("NA", inplace=True)
+    
     # Assign occurrence numbers correctly
     df1['df1_count'] = df1.groupby(columns_to_compare).cumcount() + 1
     df2['df2_count'] = df2.groupby(columns_to_compare).cumcount() + 1
@@ -16,6 +51,7 @@
         if row["_merge"] == "left_only":
             if row["df1_count"] > row["df2_count"]:
                 return "missing" if row["status_df1"] in ["correct", "incomplete"] else "valid drop"
+            return "missing"
         elif row["_merge"] == "right_only":
             return "new incorrect"
         return row["status_df1"]
@@ -23,10 +59,23 @@
     merged_df[new_status_column] = merged_df.apply(determine_new_status, axis=1)
     
     # Handle extra occurrences in excel2
-    extra_rows = merged_df[merged_df["_merge"] == "right_only"]
+    extra_rows = merged_df[merged_df["_merge"] == "right_only"].copy()
     extra_rows[new_status_column] = "new incorrect"
     merged_df = pd.concat([merged_df, extra_rows], ignore_index=True)
     
     # Drop helper column
     merged_df.drop(columns=["_merge"], inplace=True, errors="ignore")
     
+    return merged_df
+
+# Example usage
+excel1_path = "file1.xlsx"
+excel2_path = "file2.xlsx"
+sheet_name_excel1 = "Sheet1"
+sheet_name_excel2 = "Sheet1"
+columns_to_compare = ['TransactionId', 'Account ID', 'Party Name', 'Type', 'Country']
+status_column = "status"
+new_status_column = "new_status"
+
+result_df = compare_excels(excel1_path, excel2_path, sheet_name_excel1, sheet_name_excel2, columns_to_compare, status_column, new_status_column)
+result_df.to_excel("output.xlsx", index=False)
