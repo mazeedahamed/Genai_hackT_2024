@@ -1,88 +1,10 @@
-import os
-import pandas as pd
+    # Assign status based on merging result and occurrence counts
+    def assign_status(row):
+        if row["_merge"] == "left_only":
+            if row["df1_count"] > row["df2_count"]:
+                return "missing" if row["status_df1"] in ["correct", "incomplete"] else "valid drop"
+        elif row["_merge"] == "right_only":
+            return "new incorrect"
+        return row[new_status_column]
 
-# Define column names
-columns_to_compare = ['TransactionId', 'Account ID', 'Party Name', 'Type', 'Country']
-status_column = 'status'  # Column storing status in df1
-new_status_column = 'updated_status'  # New column for updated status
-
-# Status mapping
-STATUS_MISSING = "Missing"
-STATUS_VALID_DROP = "Valid Drop"
-STATUS_NEW_INCORRECT = "New Incorrect"
-
-try:
-    # Check if files exist
-    if not os.path.exists(excel1_path) or not os.path.exists(excel2_path):
-        raise FileNotFoundError("One or both Excel files are missing!")
-
-    # Load Excel files
-    df1 = pd.read_excel(excel1_path, dtype=str)
-    df2 = pd.read_excel(excel2_path, dtype=str)
-
-    # Ensure required columns exist in both dataframes
-    required_columns = set(columns_to_compare + [status_column])
-    missing_columns_df1 = required_columns - set(df1.columns)
-    missing_columns_df2 = required_columns - set(df2.columns)
-
-    if missing_columns_df1 or missing_columns_df2:
-        raise ValueError(f"Missing columns: {missing_columns_df1} in df1, {missing_columns_df2} in df2")
-
-    df1.fillna("NA", inplace=True)
-    df2.fillna("NA", inplace=True)
-
-    # Count occurrences of each df1 row in df2
-    df2["count_in_df2"] = df2.groupby(columns_to_compare)[columns_to_compare[0]].transform('count')
-
-    # **Step 1: Check occurrences for df1 rows in df2**
-    def get_occurrences(row):
-        return df2[(df2[columns_to_compare] == row[columns_to_compare]).all(axis=1)]["count_in_df2"].max() or 0
-
-    df1["occurrences_in_df2"] = df1.apply(get_occurrences, axis=1)
-
-    # **Step 2: Update status in df1 based on occurrences**
-    def update_status(row):
-        if row["occurrences_in_df2"] == 0:
-            if row[status_column] in ["Correct", "Incomplete"]:
-                return STATUS_MISSING
-            elif row[status_column] == "Incorrect":
-                return STATUS_VALID_DROP
-        return row[status_column]  # Keep status if at least one match exists
-
-    df1[new_status_column] = df1.apply(update_status, axis=1)
-
-    # **Step 3: Append new rows for multiple occurrences**
-    new_rows = []
-    for _, row in df1.iterrows():
-        occurrences = row["occurrences_in_df2"]
-        if occurrences > 1:
-            for _ in range(occurrences - 1):  # Append (occurrences - 1) new rows
-                new_row = row[columns_to_compare].to_dict()
-                new_row[status_column] = STATUS_NEW_INCORRECT
-                new_row[new_status_column] = STATUS_NEW_INCORRECT
-                new_rows.append(new_row)
-
-    # **Step 4: Add rows that are present in df2 but missing in df1**
-    df1_existing_set = set(df1[columns_to_compare].apply(tuple, axis=1))  # Convert df1 rows to tuples for easy lookup
-    for _, row in df2.iterrows():
-        row_tuple = tuple(row[columns_to_compare])
-        if row_tuple not in df1_existing_set:
-            new_row = row[columns_to_compare].to_dict()
-            new_row[status_column] = STATUS_NEW_INCORRECT
-            new_row[new_status_column] = STATUS_NEW_INCORRECT
-            new_rows.append(new_row)
-
-    # Convert new rows into DataFrame and append to df1
-    if new_rows:
-        df1 = pd.concat([df1, pd.DataFrame(new_rows)], ignore_index=True)
-
-    # Drop helper columns
-    df1.drop(columns=["occurrences_in_df2"], inplace=True, errors="ignore")
-
-    # Save updated df1 back to Excel
-    df1.to_excel("Updated_Excel1.xlsx", index=False)
-
-    print("Comparison and update completed. Updated file saved as 'Updated_Excel1.xlsx'.")
-
-except Exception as e:
-    print(f"Error: {e}")
+    merged_df[new_status_column] = merged_df.apply(assign_status, axis=1)
