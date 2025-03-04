@@ -1,28 +1,29 @@
-Example:
+Smith established the Smith Family Trust to manage his wealth. Michael Johnson, his business partner, played a key role in expanding investments, directly contributing to the trust’s wealth.
 
-User Input:
-We'd like to add 2 Genie fields to the custom highlights panel on the Account Summary page in Agent Desktop.
-As an agent, I want to see if an account is engaged and their tier level on the account summary so that I know the customer's relationship status with the firm.
+Meanwhile, Laura (wife) and Daniel (son) are beneficiaries who inherit wealth but did not contribute to its creation. Emily Brown, the trustee, oversees trust operations but does not generate wealth
 
-Acceptance Criteria:
 
-Field name: Engaged
-The field will show the Platinum User's name if the account is engaged.
-The field will be blank if the account is not engaged.
-Valid Test Cases (to be generated):
+Valid Party:
+✅ Michael Johnson (actively contributed to wealth generation)
 
-Summary: Add "Engaged" field to the Account Summary in Agent Desktop.
+Invalid Parties:
+❌ Laura & Daniel (successors, only inheriting wealth)
+❌ Emily Brown (trustee, administrative role only)
 
-Background:
-Given the user is logged into the Agent Desktop
-And the user navigates to the Account Summary page
 
-Scenario: Display Engaged Field for Engaged Account
-Given an agent views an account summary
-When the account is engaged and associated with a Platinum User
-Then the Engaged field should display the Platinum User's name
+19,20
 
-Scenario: Display Blank Engaged Field for Non-Engaged Account
-Given an agent views an account summary
-When the account is not engaged
-Then the Engaged field should be blank
+===============
+
+
+Section: Legal Statement (Settlement or Alimony Payments)
+Smith was a professional athlete who played in the National Football League (NFL) for over a decade. After retiring, he received a settlement payout from a contractual dispute with his former team, the Chicago Hawks.
+
+Additionally, he invested in Smith Sports Academy, a privately owned training facility that generates revenue. However, the NFL and Chicago Hawks themselves did not directly contribute to his wealth but were rather entities involved in his career.
+
+Valid Party:
+✅ Smith Sports Academy (Privately owned business contributing to wealth)
+
+Invalid Parties:
+❌ National Football League (NFL) (A sports league, not an individual or business directly contributing)
+❌ Chicago Hawks (A sports team, not a direct wealth contributor)
