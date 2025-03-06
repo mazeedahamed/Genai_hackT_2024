@@ -1,98 +1,55 @@
-Smith established the Smith Family Trust to manage his wealth. Michael Johnson, his business partner, played a key role in expanding investments, directly contributing to the trust’s wealth.
+import pandas as pd
 
-Meanwhile, Laura (wife) and Daniel (son) are beneficiaries who inherit wealth but did not contribute to its creation. Emily Brown, the trustee, oversees trust operations but does not generate wealth
+# Load the Excel file
+file_path = 'your_file.xlsx'
+df = pd.read_excel(file_path)
 
+# Replace blanks and zeros with NaN for proper null counting
+df.replace({"": None, 0: None}, inplace=True)
 
-Valid Party:
-✅ Michael Johnson (actively contributed to wealth generation)
+# Columns to check for missing values
+columns_to_check = ['name', 'data', 'age', 'college']
 
-Invalid Parties:
-❌ Laura & Daniel (successors, only inheriting wealth)
-❌ Emily Brown (trustee, administrative role only)
+# Columns to extract for first occurrence
+status_columns = ['status_age', 'status_data', 'status_name', 'status_college']
 
+### Step 1: Identify the column with the least nulls for each symbol
+def get_column_with_least_nulls(df, symbol):
+    subset = df[df['symbol'] == symbol]  # Filter rows for this symbol
+    null_counts = subset[columns_to_check].isnull().sum()  # Count nulls per column
+    return null_counts.idxmin()  # Return column with the least nulls
 
-19,20
+# Store symbol-wise best column
+symbol_least_null_column = {symbol: get_column_with_least_nulls(df, symbol) for symbol in df['symbol'].unique()}
 
-===============
+### Step 2: Extract first occurrence values
+def get_first_occurrence_values(df, symbol):
+    subset = df[df['symbol'] == symbol]  # Get rows for this symbol
+    first_row = subset.iloc[0]  # First occurrence row
+    return first_row[status_columns]  # Extract status values
 
+# Dictionary to store extracted status values for each symbol
+symbol_first_values = {symbol: get_first_occurrence_values(df, symbol) for symbol in df['symbol'].unique()}
 
-Section: Legal Statement (Settlement or Alimony Payments)
-Smith was a professional athlete who played in the National Football League (NFL) for over a decade. After retiring, he received a settlement payout from a contractual dispute with his former team, the Chicago Hawks.
+### Step 3: Update the best row (least nulls) with extracted values
+df['duplicate'] = False  # Add a duplicate flag
 
-Additionally, he invested in Smith Sports Academy, a privately owned training facility that generates revenue. However, the NFL and Chicago Hawks themselves did not directly contribute to his wealth but were rather entities involved in his career.
+for symbol in df['symbol'].unique():
+    subset = df[df['symbol'] == symbol]  # Get rows for the symbol
+    
+    if not subset.empty:
+        # Identify the row index with the least nulls in the best column
+        best_column = symbol_least_null_column[symbol]
+        best_row_index = subset[subset[best_column].notnull()].index[0]  # Get first valid row
 
-Valid Party:
-✅ Smith Sports Academy (Privately owned business contributing to wealth)
+        # Update that row with first occurrence status values
+        df.loc[best_row_index, best_column] = symbol_first_values[symbol].values[0]
+        
+        # Mark all other occurrences as duplicate
+        df.loc[df.index.isin(subset.index.difference([best_row_index])), 'duplicate'] = True  
 
-Invalid Parties:
-❌ National Football League (NFL) (A sports league, not an individual or business directly contributing)
-❌ Chicago Hawks (A sports team, not a direct wealth contributor)
+# Save the updated DataFrame back to an Excel file
+df.to_excel('updated_file.xlsx', index=False)
 
-
-
-=============
-
-
-Smith has accumulated wealth through strategic real estate investments. He owns multiple commercial properties through Summit Realty Group, a private real estate firm managing his assets. One of his major acquisitions includes an office complex purchased from Stonebridge Holdings, a private development company specializing in commercial real estate.
-
-Additionally, Smith invested in residential projects under Pinecrest Estates, a company focused on high-value housing developments. These ventures have significantly contributed to his overall financial growth.
-
-However, certain entities referenced in real estate transactions are not valid parties. For instance, references to Federal Housing Administration (FHA), Department of the Interior, or National Park Service are invalid as they are U.S. Government entities and do not directly contribute to Smith’s wealth.
-
-Valid Parties:
-✅ Summit Realty Group (Manages Smith’s real estate assets)
-✅ Stonebridge Holdings (Private development company)
-✅ Pinecrest Estates (Residential real estate investment)
-
-Invalid Parties:
-❌ Federal Housing Administration (FHA) (U.S. Government entity)
-❌ Department of the Interior (U.S. Government entity)
-❌ National Park Service (U.S. Government entity)
-
-
-
-
-============
-
-
-
-Smith’s recent financial success comes from his winnings at a casino and strategic bets placed through a betting firm. His jackpot earnings from a popular lottery house significantly increased his wealth. To manage these funds, he sought guidance from Goldline Investment Advisors, while Premier Financial Consultants assisted with tax and legal matters. Additionally, insights from BetSmart Analytics helped refine his betting strategies, indirectly contributing to his financial growth.
-
-Valid Parties (Indirectly Contributed to Wealth)
-Goldline Investment Advisors
-Premier Financial Consultants
-BetSmart Analytics
-Invalid Parties (Common Nouns - Not Allowed as Party Names)
-Casino
-Lottery House
-Betting Firm
-Gaming Association
-Gambling Network
-
-
-
-==============
-
-
-
-Smith has expanded his business portfolio by acquiring stakes in a tech startup, a consulting firm, and a retail company. His investments also include a manufacturing unit, a logistics enterprise, and a trading group, further diversifying his holdings. Additionally, he explored opportunities in agricultural land for future development. To manage these ventures effectively, he works with Goldline Investment Advisors, while Premier Legal Services ensures regulatory compliance. Capital Growth Partners also provides strategic guidance, indirectly contributing to his business success.
-
-Valid Parties (Indirectly Contributed to Wealth)
-Goldline Investment Advisors
-Premier Legal Services
-Capital Growth Partners
-Invalid Parties (Generic Business Types & Websites - Not Allowed as Party Names)
-Tech Startup
-Consulting Firm
-Agricultural Land
-Retail Company
-Manufacturing Unit
-Logistics Enterprise
-Trading Group
-XYZBusiness.com
-ABCVentures.net
-
-
-
-
-
+# Print updated DataFrame
+print(df)
