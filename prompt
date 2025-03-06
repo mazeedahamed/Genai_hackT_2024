@@ -7,3 +7,15 @@ inside_df["matched_count"] = inside_df.apply(lambda row: count_matched_fields(
 
 def count_matched_fields(actual_values):
     return sum(1 for col in actual_values if "matched" in str(actual_values[col]).lower())
+
+
+
+# Update Actual values
+    inside_df.loc[inside_df["inside_data"] == inside_value, ["Actual Description", "Actual Date", "Actual Quantity"]] = \
+        best_match_row[["Actual Description", "Actual Date", "Actual Quantity"]].values
+
+    # Compare and mark as "Matched" or "Mismatched"
+    for col, ground_col in zip(["Actual Description", "Actual Date", "Actual Quantity"], 
+                                ["Description", "Date", "Quantity"]):
+        inside_df.loc[inside_df["inside_data"] == inside_value, col + " Status"] = \
+            inside_df.apply(lambda row: "Matched" if row[col] == row[ground_col] else "Mismatched", axis=1)
