@@ -19,3 +19,21 @@ def count_matched_fields(actual_values):
                                 ["Description", "Date", "Quantity"]):
         inside_df.loc[inside_df["inside_data"] == inside_value, col + " Status"] = \
             inside_df.apply(lambda row: "Matched" if row[col] == row[ground_col] else "Mismatched", axis=1)
+
+
+# Update only the specific columns while keeping other data intact
+    update_columns = ["Actual Description", "Actual Date", "Actual Quantity"]
+    for col in update_columns:
+        inside_df.loc[inside_df["inside_data"] == inside_value, col] = best_match_row[col]
+
+    # Mark "Matched" or "Mismatched" for each corresponding column
+    status_columns = {"Actual Description": "Description", "Actual Date": "Date", "Actual Quantity": "Quantity"}
+    for actual_col, ground_col in status_columns.items():
+        status_col_name = actual_col + " Status"  # Example: "Actual Description Status"
+        
+        # Ensure column exists in DataFrame before updating
+        if status_col_name not in inside_df.columns:
+            inside_df[status_col_name] = ""  # Initialize column if not present
+        
+        inside_df.loc[inside_df["inside_data"] == inside_value, status_col_name] = \
+            inside_df.apply(lambda row: "Matched" if row[actual_col] == row[ground_col] else "Mismatched", axis=1)
