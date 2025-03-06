@@ -1,55 +1,52 @@
 import pandas as pd
+import re
 
-# Load the Excel file
-file_path = 'your_file.xlsx'
-df = pd.read_excel(file_path)
+def extract_inside_data(symbol):
+    match = re.search(r'\((.*?)\)', symbol)
+    return match.group(1) if match else None
 
-# Replace blanks and zeros with NaN for proper null counting
-df.replace({"": None, 0: None}, inplace=True)
+def count_matched_fields(actual_values, ground_truth):
+    return sum(1 for col in actual_values if actual_values[col] and ground_truth[col] in actual_values[col])
 
-# Columns to check for missing values
-columns_to_check = ['name', 'data', 'age', 'college']
+# Load Excel file
+df = pd.read_excel("your_file.xlsx")
 
-# Columns to extract for first occurrence
-status_columns = ['status_age', 'status_data', 'status_name', 'status_college']
+# Step 1: Filter rows starting with "Duplicate("
+df["inside_data"] = df["Symbol"].apply(lambda x: extract_inside_data(x) if x.startswith("Duplicate(") else x)
 
-### Step 1: Identify the column with the least nulls for each symbol
-def get_column_with_least_nulls(df, symbol):
-    subset = df[df['symbol'] == symbol]  # Filter rows for this symbol
-    null_counts = subset[columns_to_check].isnull().sum()  # Count nulls per column
-    return null_counts.idxmin()  # Return column with the least nulls
+duplicates_df = df[df["Symbol"].str.startswith("Duplicate(")]
+inside_df = df[~df["Symbol"].str.startswith("Duplicate(")]
 
-# Store symbol-wise best column
-symbol_least_null_column = {symbol: get_column_with_least_nulls(df, symbol) for symbol in df['symbol'].unique()}
+# Step 2: Group by inside_data and count occurrences
+grouped = df.groupby("inside_data").size().reset_index(name="total_occurrences")
 
-### Step 2: Extract first occurrence values
-def get_first_occurrence_values(df, symbol):
-    subset = df[df['symbol'] == symbol]  # Get rows for this symbol
-    first_row = subset.iloc[0]  # First occurrence row
-    return first_row[status_columns]  # Extract status values
+# Step 3: Extract ground truth values and calculate matched-inside-data
+inside_df["matched_count"] = inside_df.apply(lambda row: count_matched_fields(
+    {"Actual Description": row["Actual Description"],
+     "Actual Date": row["Actual Date"],
+     "Actual Quantity": row["Actual Quantity"]},
+    {"Actual Description": row["Description"],
+     "Actual Date": row["Date"],
+     "Actual Quantity": row["Quantity"]}), axis=1)
 
-# Dictionary to store extracted status values for each symbol
-symbol_first_values = {symbol: get_first_occurrence_values(df, symbol) for symbol in df['symbol'].unique()}
+# Step 4: Calculate duplicate matched records
+duplicates_df["matched_count"] = duplicates_df.apply(lambda row: count_matched_fields(
+    {"Actual Description": row["Actual Description"],
+     "Actual Date": row["Actual Date"],
+     "Actual Quantity": row["Actual Quantity"]},
+    {"Actual Description": inside_df.loc[inside_df["inside_data"] == row["inside_data"], "Description"].values[0],
+     "Actual Date": inside_df.loc[inside_df["inside_data"] == row["inside_data"], "Date"].values[0],
+     "Actual Quantity": inside_df.loc[inside_df["inside_data"] == row["inside_data"], "Quantity"].values[0]}), axis=1)
 
-### Step 3: Update the best row (least nulls) with extracted values
-df['duplicate'] = False  # Add a duplicate flag
-
-for symbol in df['symbol'].unique():
-    subset = df[df['symbol'] == symbol]  # Get rows for the symbol
+# Step 5: Determine the best-matched row
+for inside_value in inside_df["inside_data"].unique():
+    matched_inside = inside_df.loc[inside_df["inside_data"] == inside_value, "matched_count"].values[0]
+    duplicate_matches = duplicates_df.loc[duplicates_df["inside_data"] == inside_value, "matched_count"]
     
-    if not subset.empty:
-        # Identify the row index with the least nulls in the best column
-        best_column = symbol_least_null_column[symbol]
-        best_row_index = subset[subset[best_column].notnull()].index[0]  # Get first valid row
+    if not duplicate_matches.empty and duplicate_matches.max() > matched_inside:
+        best_match_row = duplicates_df.loc[duplicates_df["inside_data"] == inside_value].nlargest(1, "matched_count")
+        inside_df.loc[inside_df["inside_data"] == inside_value, ["Actual Description", "Actual Date", "Actual Quantity"]] = \
+            best_match_row[["Actual Description", "Actual Date", "Actual Quantity"]].values
 
-        # Update that row with first occurrence status values
-        df.loc[best_row_index, best_column] = symbol_first_values[symbol].values[0]
-        
-        # Mark all other occurrences as duplicate
-        df.loc[df.index.isin(subset.index.difference([best_row_index])), 'duplicate'] = True  
-
-# Save the updated DataFrame back to an Excel file
-df.to_excel('updated_file.xlsx', index=False)
-
-# Print updated DataFrame
-print(df)
+# Save the updated dataframe to a new Excel file
+inside_df.to_excel("updated_data.xlsx", index=False)
