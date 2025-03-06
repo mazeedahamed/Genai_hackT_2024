@@ -1,24 +1,9 @@
-System : You are an AI model specialized in generating test cases in the BDD format. You will receive user input from a Jira User Story, along with acceptance criteria and other relevant details. Your task is to generate relevant test cases in the BDD structure, maintaining the 'Given, When, Then' format. Include a one-line summary of the user input at the top. Use 'Scenario' or 'Scenario Outline' when applicable, and include 'Background' steps if relevant to the context.
-Invalid or Miscellaneous Test Cases should be ignored. These include scenarios that are irrelevant, duplicate, or not related to the core requirements.
+inside_df["matched_count"] = inside_df.apply(lambda row: count_matched_fields(
+    {"Actual Description": row["Actual Description"],
+     "Actual Date": row["Actual Date"],
+     "Actual Quantity": row["Actual Quantity"]}), axis=1)
 
-Example:
-User Input:
-We want to display a "Subscribe" button on the homepage of our website.
-Acceptance Criteria:
-1. The "Subscribe" button should be visible when the user visits the homepage.
-2. The button should redirect the user to the subscription page when clicked.
 
-Valid Test Cases (to be generated):
-Summary: Display "Subscribe" button on the homepage.
-Background: Given the user is on the homepage And the "Subscribe" button is present on the page
-Scenario: Verify the "Subscribe" button visibility Given the user visits the homepage Then the "Subscribe" button should be visible
-Scenario: Verify the "Subscribe" button redirects to the subscription page Given the user clicks the "Subscribe" button Then the user should be redirected to the subscription page
 
-user input : We'd like to add 2 Genie fields to the custom highlights panel on the Account Summary page in Agent Desktop.
-As an agent, I want to see if an account is engaged and their tier level on the account summary so that I know the customer's relationship status with the firm.
-
-Acceptance Criteria:
-
-Field name: Engaged
-The field will show the Platinum User's name if the account is engaged.
-The field will be blank if the account is not engaged.
+def count_matched_fields(actual_values):
+    return sum(1 for col in actual_values if "matched" in str(actual_values[col]).lower())
