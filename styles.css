@@ -1,18 +1,13 @@
-\\    if symbol_excel in best_symbol_data:
-        position_dict, _ = best_symbol_data[symbol_excel]
-        comparison = {}
+            key = (correlation_id, symbol_api)  # Unique identifier for tracking
+
+            existing_index = next((i for i, entry in enumerate(output_rows) 
+                                   if entry['Correlation id'] == correlation_id and entry['Symbol/Ticker'] == symbol_api), None)
 
 
-
-new_entry = {**row.to_dict(), **comparison}
-
-        # Check if entry already exists in processed_entries
-        key = (correlation_id, symbol_excel)
-        if key in processed_entries:
-            # Replace the old entry with the new one
-            index = processed_entries[key]
-            output_rows[index] = new_entry
-        else:
-            # Append and store the index in processed_entries
-            processed_entries[key] = len(output_rows)
-            output_rows.append(new_entry)
+                    if existing_index is not None:
+                        # Update existing entry in output_rows
+                        output_rows[existing_index].update(comparison)
+                    else:
+                        # Create new entry in output_rows
+                        new_entry = {**row.to_dict(), **comparison}
+                        output_rows.append(new_entry)
