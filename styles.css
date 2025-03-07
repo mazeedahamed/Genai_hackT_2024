@@ -1,63 +1,18 @@
-body {
-    font-family: Arial, sans-serif;
-}
-
-.container {
-    width: 90%;
-    margin: 20px auto;
-    border: 1px solid black;
-    padding: 10px;
-}
-
-.section {
-    border: 1px solid black;
-    margin-bottom: 10px;
-    padding: 10px;
-}
-
-.input-box {
-    margin: 10px 0;
-}
-
-.radio-group {
-    margin: 10px 0;
-}
-
-.table-box {
-    border: 1px solid black;
-    padding: 10px;
-    margin: 10px 0;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-th, td {
-    border: 1px solid black;
-    padding: 8px;
-    text-align: left;
-}
+\\    if symbol_excel in best_symbol_data:
+        position_dict, _ = best_symbol_data[symbol_excel]
+        comparison = {}
 
 
 
+new_entry = {**row.to_dict(), **comparison}
 
-import pandas as pd
-import numpy as np
-
-# Replace 'path_to_your_file.parquet' with the actual path to your Parquet file
-file_path = 'path_to_your_file.parquet'
-df = pd.read_parquet(file_path)
-
-# Set a seed for reproducibility
-seed_value = 42
-
-# Shuffle the DataFrame
-shuffled_df = df.sample(frac=1, random_state=seed_value).reset_index(drop=True)
-
-# Select the first 10 rows (or any number you want)
-samples = shuffled_df.head(10)
-
-# Display the sampled data
-print(samples)
+        # Check if entry already exists in processed_entries
+        key = (correlation_id, symbol_excel)
+        if key in processed_entries:
+            # Replace the old entry with the new one
+            index = processed_entries[key]
+            output_rows[index] = new_entry
+        else:
+            # Append and store the index in processed_entries
+            processed_entries[key] = len(output_rows)
+            output_rows.append(new_entry)
