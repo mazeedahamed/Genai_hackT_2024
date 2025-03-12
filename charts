@@ -14,15 +14,14 @@ gt_grouped = gt_df.groupby(["Account_ID", "Party_Name", "Type"]).agg({
     "Feedback": lambda x: ", ".join(x.dropna().unique())
 }).reset_index()
 
-# Merge Execution Results with Ground Truth on Party_Name
-gt_exec_merged = pd.merge(gt_grouped, exec_df, 
-                           left_on=["Account_ID", "Party_Name", "Type"],
-                           right_on=["Account_ID", "Party_Name_AI", "Type"],
-                           how="outer")
+# Collect unique Party_Name_AI for each Account_ID and Type
+exec_grouped = exec_df.groupby(["Account_ID", "Type"])["Party_Name_AI"].apply(list).reset_index()
 
-# Fill missing values
-output_df = gt_exec_merged[["Account_ID", "Party_Name", "Type", "Country", "Status", "Feedback", "Party_Name_AI"]]
-output_df = output_df.sort_values(by=["Account_ID", "Party_Name_AI"]).reset_index(drop=True)
+# Merge Execution Results with Ground Truth on Account_ID and Type
+gt_exec_merged = pd.merge(gt_grouped, exec_grouped, on=["Account_ID", "Type"], how="outer")
+
+# Expand multiple Party_Name_AI entries into separate rows
+output_df = gt_exec_merged.explode("Party_Name_AI").reset_index(drop=True)
 
 # Save to output file
 output_file = "output.xlsx"
