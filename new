@@ -23,19 +23,72 @@ gt_exec_merged = pd.merge(gt_grouped, exec_df,
 # Select required columns
 output_df = gt_exec_merged[["Account_ID", "Party_Name", "Type", "Country", "Status", "Feedback", "Party_Name_AI"]]
 
-# Append unique Party_Name_AI values that were not in Ground Truth
-unique_party_names = exec_df["Party_Name_AI"].drop_duplicates().tolist()
+# Identify missing entries (Party_Name_AI values not found in Ground Truth)
+missing_party_names = exec_df["Party_Name_AI"].unique()
+existing_party_names = gt_df["Party_Name"].unique()
+new_entries = [name for name in missing_party_names if name not in existing_party_names]
+
+# Create missing entries dataframe
 missing_entries = pd.DataFrame({
-    "Account_ID": [123] * len(unique_party_names),  # Keeping same Account_ID as per example
-    "Party_Name": ["" for _ in unique_party_names],
-    "Type": ["" for _ in unique_party_names],
-    "Country": ["" for _ in unique_party_names],
-    "Status": ["" for _ in unique_party_names],
-    "Feedback": ["" for _ in unique_party_names],
-    "Party_Name_AI": unique_party_names
+    "Account_ID": [exec_df["Account_ID"].iloc[0]] * len(new_entries),
+    "Party_Name": ["" for _ in new_entries],
+    "Type": ["" for _ in new_entries],
+    "Country": ["" for _ in new_entries],
+    "Status": ["" for _ in new_entries],
+    "Feedback": ["" for _ in new_entries],
+    "Party_Name_AI": new_entries
 })
 
-# Append missing entries
+# Append missing entries to the output dataframe
+output_df = pd.concat([output_df, missing_entries]).drop_duplicates().reset_index(drop=True)
+
+# Save to output file
+output_file = "output.xlsx"
+output_df.to_excel(output_file, index=False)
+
+print(f"Output saved to {output_file}")
+import pandas as pd
+
+# Load Excel files
+ground_truth_file = "ground_truth.xlsx"
+execution_results_file = "execution_results.xlsx"
+
+gt_df = pd.read_excel(ground_truth_file)
+exec_df = pd.read_excel(execution_results_file)
+
+# Group Ground Truth by Account_ID, Party_Name, Type
+gt_grouped = gt_df.groupby(["Account_ID", "Party_Name", "Type"]).agg({
+    "Country": "first",
+    "Status": lambda x: ", ".join(x.dropna().unique()),
+    "Feedback": lambda x: ", ".join(x.dropna().unique())
+}).reset_index()
+
+# Merge Execution Results with Ground Truth on Party_Name
+gt_exec_merged = pd.merge(gt_grouped, exec_df, 
+                           left_on=["Account_ID", "Party_Name", "Type"],
+                           right_on=["Account_ID", "Party_Name_AI", "Type"],
+                           how="right")
+
+# Select required columns
+output_df = gt_exec_merged[["Account_ID", "Party_Name", "Type", "Country", "Status", "Feedback", "Party_Name_AI"]]
+
+# Identify missing entries (Party_Name_AI values not found in Ground Truth)
+missing_party_names = exec_df["Party_Name_AI"].unique()
+existing_party_names = gt_df["Party_Name"].unique()
+new_entries = [name for name in missing_party_names if name not in existing_party_names]
+
+# Create missing entries dataframe
+missing_entries = pd.DataFrame({
+    "Account_ID": [exec_df["Account_ID"].iloc[0]] * len(new_entries),
+    "Party_Name": ["" for _ in new_entries],
+    "Type": ["" for _ in new_entries],
+    "Country": ["" for _ in new_entries],
+    "Status": ["" for _ in new_entries],
+    "Feedback": ["" for _ in new_entries],
+    "Party_Name_AI": new_entries
+})
+
+# Append missing entries to the output dataframe
 output_df = pd.concat([output_df, missing_entries]).drop_duplicates().reset_index(drop=True)
 
 # Save to output file
