@@ -1,69 +1,31 @@
 import pandas as pd
-import os
 
-# === CONFIGURATION ===
-excel1_path = "excel1.xlsx"
-excel2_path = "excel2.xlsx"
-output_path = "updated_excel1.xlsx"
-sheet_name = "sheet1"
+# Load Excel files
+ground_truth_file = "ground_truth.xlsx"
+execution_results_file = "execution_results.xlsx"
 
-# Columns for comparison
-columns_to_compare = ["Transactionid", "number", "name", "type", "country"]
-status_column = "status"
-new_status_column = "new_status"
+gt_df = pd.read_excel(ground_truth_file)
+exec_df = pd.read_excel(execution_results_file)
 
-# Status labels
-STATUS_CORRECT = "Correct and complete"
-STATUS_INCOMPLETE = "Incomplete"
-STATUS_INCORRECT = "Incorrect"
-STATUS_NEW_PARTY = "New Party Incorrect"
-STATUS_VALID_DROP = "Valid Drop"
-STATUS_MISSING = "Missing"
+# Group Ground Truth by Account_ID, Party_Name, Type
+gt_grouped = gt_df.groupby(["Account_ID", "Party_Name", "Type"]).agg({
+    "Country": "first",
+    "Status": lambda x: ", ".join(x.dropna().unique()),
+    "Feedback": lambda x: ", ".join(x.dropna().unique())
+}).reset_index()
 
-try:
-    # Check if files exist
-    if not os.path.exists(excel1_path) or not os.path.exists(excel2_path):
-        raise FileNotFoundError("One or both Excel files are missing!")
+# Merge Execution Results with Ground Truth on Party_Name
+gt_exec_merged = pd.merge(gt_grouped, exec_df, 
+                           left_on=["Account_ID", "Party_Name", "Type"],
+                           right_on=["Account_ID", "Party_Name_AI", "Type"],
+                           how="outer")
 
-    # Load Excel files
-    df1 = pd.read_excel(excel1_path, sheet_name=sheet_name, dtype=str)
-    df2 = pd.read_excel(excel2_path, sheet_name=sheet_name, dtype=str)
+# Fill missing values
+output_df = gt_exec_merged[["Account_ID", "Party_Name", "Type", "Country", "Status", "Feedback", "Party_Name_AI"]]
+output_df = output_df.sort_values(by=["Account_ID", "Party_Name_AI"]).reset_index(drop=True)
 
-    # Ensure all required columns exist
-    required_columns = set(columns_to_compare + [status_column])
-    missing_columns_df1 = required_columns - set(df1.columns)
-    missing_columns_df2 = required_columns - set(df2.columns)
+# Save to output file
+output_file = "output.xlsx"
+output_df.to_excel(output_file, index=False)
 
-    if missing_columns_df1 or missing_columns_df2:
-        raise ValueError(f"Missing columns: {missing_columns_df1} in df1, {missing_columns_df2} in df2")
-
-    # Assign occurrence numbers correctly
-    df1['occurrence'] = df1.groupby(columns_to_compare).cumcount() + 1
-    df2['occurrence'] = df2.groupby(columns_to_compare).cumcount() + 1
-
-    # Merge both DataFrames on key columns and occurrences
-    merged_df = df1.merge(df2, on=columns_to_compare + ['occurrence'], how="outer", suffixes=("_df1", "_df2"), indicator=True)
-
-    # Initialize new_status column with the existing status from df1
-    merged_df[new_status_column] = merged_df.get("status_df1", "")
-
-    # Vectorized Status Assignment
-    merged_df.loc[merged_df["_merge"] == "right_only", new_status_column] = STATUS_NEW_PARTY
-    merged_df.loc[(merged_df["_merge"] == "left_only") & merged_df["status_df1"].isin([STATUS_CORRECT, STATUS_INCOMPLETE]), new_status_column] = STATUS_MISSING
-    merged_df.loc[(merged_df["_merge"] == "left_only") & (merged_df["status_df1"] == STATUS_INCORRECT), new_status_column] = STATUS_VALID_DROP
-
-    # Drop helper columns
-    merged_df.drop(columns=["_merge"], inplace=True, errors="ignore")
-
-    # Save the updated file
-    merged_df.to_excel(output_path, index=False)
-    print(f"✅ Updated Excel saved as: {output_path}")
-
-except FileNotFoundError as e:
-    print(f"❌ Error: {e}")
-
-except ValueError as e:
-    print(f"❌ Error: {e}")
-
-except Exception as e:
-    print(f"❌ An unexpected error occurred: {e}")
+print(f"Output saved to {output_file}")
