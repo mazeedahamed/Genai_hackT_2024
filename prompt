@@ -46,3 +46,64 @@ def assign_new_status(output_df):
                 output_df.at[index, "new_status"] = "new party incorrect"
     
     return output_df
+
+======
+
+
+import pandas as pd
+
+# Externalized status names
+CORRECT_COMPLETE = "correct and complete"
+INCORRECT = "incorrect"
+INCOMPLETE = "incomplete"
+MISSING = "Missing"
+VALID_DROP = "valid drop"
+NEW_PARTY_INCORRECT = "new party incorrect"
+GROUP_NEW_PARTY_INCORRECT = "Group - new party incorrect"
+
+def assign_new_status(output_df):
+    # Create a new column for the new status
+    output_df["new_status"] = None
+    
+    # Iterate over each row in the DataFrame
+    for index, row in output_df.iterrows():
+        # Get the status value for the current row
+        status = row["status"]
+
+        # Condition 1: If the status is correct and complete, incorrect, or incomplete
+        # and any of the data columns has a value of 100, copy the status to new_status
+        if status in [CORRECT_COMPLETE, INCORRECT, INCOMPLETE]:
+            if any(pd.notna(row[f"data_{i+1}"]) and row[f"data_{i+1}"] == 100 for i in range(1, len(output_df.columns)-1)):
+                output_df.at[index, "new_status"] = status
+
+        # Condition 2: If the status is correct and complete, incorrect, or incomplete
+        # and all data columns have 0, then check status
+        elif status in [CORRECT_COMPLETE, INCORRECT, INCOMPLETE]:
+            if all(pd.isna(row[f"data_{i+1}"]) or row[f"data_{i+1}"] == 0 for i in range(1, len(output_df.columns)-1)):
+                if status in [CORRECT_COMPLETE, INCOMPLETE]:
+                    output_df.at[index, "new_status"] = MISSING
+                else:
+                    output_df.at[index, "new_status"] = VALID_DROP
+
+        # Condition 3: If status is not available
+        elif pd.isna(status):
+            # Check if any data column has a value greater than 0
+            data_values = [row[f"data_{i+1}"] for i in range(1, len(output_df.columns)-1)]
+            non_zero_data = [val for val in data_values if pd.notna(val) and val > 0]
+            
+            if non_zero_data:
+                # Get the highest data value and assign the corresponding new status
+                max_data_value = max(non_zero_data)
+                max_data_index = data_values.index(max_data_value)
+                output_df.at[index, "new_status"] = f"{GROUP_NEW_PARTY_INCORRECT} - data{max_data_index + 1}"
+            else:
+                # If all data columns are 0
+                output_df.at[index, "new_status"] = NEW_PARTY_INCORRECT
+
+    return output_df
+
+# Example usage
+# output_df = pd.read_excel('your_input_file.xlsx')  # Load your DataFrame
+# updated_df = assign_new_status(output_df)
+# updated_df.to_excel('your_output_file.xlsx', index=False)  # Save the updated DataFrame
+
