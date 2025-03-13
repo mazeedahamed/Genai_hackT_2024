@@ -1,103 +1,43 @@
-import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import pandas as pd
 
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
+# Load Excel files
+excel1 = pd.read_excel("ground_truth.xlsx")  # Ground Truth
+excel2 = pd.read_excel("response.xlsx")  # Execution Results
 
-public class ExcelFormulaUpdater {
+# Standardize column names (trim spaces)
+excel1.columns = excel1.columns.str.strip()
+excel2.columns = excel2.columns.str.strip()
 
-    public static void main(String[] args) throws IOException {
-        // File paths
-        String filePath = "your-file-path.xlsx"; // Path to your Excel file
+# Define grouping columns
+group_by_cols = ["Account ID", "Party Name", "Type"]
 
-        // Variables for sheet names
-        String inputSheetName = "Test Execution Results"; // Source sheet with data
-        String outputSheetName = "Status Report";         // Target sheet to write the formula
+# Add an occurrence count to track multiple entries
+excel1["_occurrence"] = excel1.groupby(group_by_cols).cumcount()
+excel2["_occurrence"] = excel2.groupby(group_by_cols).cumcount()
 
-        // Map of headers and corresponding output cells
-        Map<String, String> headerToCellMap = new HashMap<>();
-        headerToCellMap.put("Overall ExactMatch", "D3");    // Header and output cell for Overall ExactMatch
-        headerToCellMap.put("Common Exact Data", "D4");     // Header and output cell for Common Exact Data
+# Perform left merge based on occurrences
+merged = pd.merge(excel1, excel2, on=group_by_cols + ["_occurrence"], how="left", suffixes=("", "_ai"))
 
-        // Open the workbook from the existing file
-        FileInputStream fis = new FileInputStream(filePath);
-        Workbook workbook = new XSSFWorkbook(fis);
+# Rename PartyName to party_name_ai
+merged.rename(columns={"PartyName": "party_name_ai"}, inplace=True)
 
-        // Get input and output sheets
-        Sheet inputSheet = workbook.getSheet(inputSheetName);
-        Sheet outputSheet = workbook.getSheet(outputSheetName);
+# Identify extra occurrences in Excel 2
+extra_entries = excel2[~excel2["_occurrence"].isin(excel1["_occurrence"])].copy()
 
-        if (inputSheet == null || outputSheet == null) {
-            throw new IllegalArgumentException("Input or Output sheet not found in the workbook.");
-        }
+# Keep only Account ID and party_name_ai, set other columns to empty
+extra_entries = extra_entries[["Account ID", "PartyName"]]
+extra_entries.rename(columns={"PartyName": "party_name_ai"}, inplace=True)
 
-        // Fixed last row number
-        int lastRowNum = 9430;
+# Add empty columns for consistency
+for col in merged.columns:
+    if col not in extra_entries.columns:
+        extra_entries[col] = ""
 
-        // Process each header and update the corresponding cell in the output sheet
-        for (Map.Entry<String, String> entry : headerToCellMap.entrySet()) {
-            String header = entry.getKey();
-            String outputCellReference = entry.getValue();
+# Append extra occurrences at the bottom
+final_result = pd.concat([merged, extra_entries], ignore_index=True)
 
-            // Determine the column letter dynamically for the header in the input sheet
-            String columnLetter = getColumnLetterFromSheet(inputSheet, header);
+# Drop helper column and save result
+final_result.drop(columns=["_occurrence"], inplace=True, errors='ignore')
+final_result.to_excel("output.xlsx", index=False)
 
-            if (columnLetter == null) {
-                throw new IllegalArgumentException("Header not found: " + header + " in sheet: " + inputSheetName);
-            }
-
-            // Generate the formula with the fixed last row number
-            String formula = String.format(
-                    "SUMIF('%s'!%s3:%s%d, \"False\", '%s'!%s3:%s%d)",
-                    inputSheetName, "BQ", "BQ", lastRowNum, // Comparison column is fixed (BQ)
-                    inputSheetName, columnLetter, columnLetter, lastRowNum);
-
-            // Parse outputCellReference to row and column indices
-            int outputRowIndex = Integer.parseInt(outputCellReference.replaceAll("[^0-9]", "")) - 1; // Convert Excel row to zero-based index
-            int outputColumnIndex = outputCellReference.replaceAll("[^A-Za-z]", "").charAt(0) - 'A'; // Convert Excel column to zero-based index
-
-            // Write the formula to the specified cell in the output sheet
-            Row outputRow = outputSheet.getRow(outputRowIndex);
-            if (outputRow == null) {
-                outputRow = outputSheet.createRow(outputRowIndex);
-            }
-            Cell cell = outputRow.createCell(outputColumnIndex, CellType.FORMULA);
-            cell.setCellFormula(formula);
-        }
-
-        // Save the updated workbook to a file
-        FileOutputStream fos = new FileOutputStream(filePath);
-        workbook.write(fos);
-
-        System.out.println("Formulas added to the " + outputSheetName + " sheet.");
-        workbook.close();
-        fis.close();
-    }
-
-    // Helper method to find the column letter in a specific sheet
-    private static String getColumnLetterFromSheet(Sheet sheet, String headerName) {
-        Row headerRow = sheet.getRow(0); // Assuming headers are in the first row
-        if (headerRow != null) {
-            for (int i = 0; i < headerRow.getLastCellNum(); i++) {
-                Cell cell = headerRow.getCell(i, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
-                if (headerName.equals(cell.toString())) {
-                    return columnIndexToLetter(i); // Convert index to Excel-style letter
-                }
-            }
-        }
-        return null; // Return null if header not found
-    }
-
-    // Helper method to convert column index to Excel-style letter
-    private static String columnIndexToLetter(int columnIndex) {
-        StringBuilder columnLetter = new StringBuilder();
-        while (columnIndex >= 0) {
-            columnLetter.insert(0, (char) ('A' + (columnIndex % 26)));
-            columnIndex = (columnIndex / 26) - 1;
-        }
-        return columnLetter.toString();
-    }
-}
+print("Comparison complete. Output saved as 'output.xlsx'.")
