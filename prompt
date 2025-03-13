@@ -1,48 +1,8 @@
-import pandas as pd
+ grouped = gt_exec_merged.groupby("Account_ID")["Party_Name"].nunique().reset_index()
 
-# Load Excel1 and Excel2
-excel1 = pd.read_excel("Excel1.xlsx")
-excel2 = pd.read_excel("Excel2.xlsx")
+    # Find the max number of unique Party_Names for any Account_ID
+    max_parties = grouped["Party_Name"].max()
 
-# Group data by Account ID
-grouped1 = excel1.groupby("Account ID")
-grouped2 = excel2.groupby("Account ID")
-
-output_rows = []
-
-for acc_id, group1 in grouped1:
-    group2 = grouped2.get_group(acc_id) if acc_id in grouped2.groups else pd.DataFrame()
-    
-    party_names_1 = group1["Party Name"].tolist()  # Get all occurrences (not unique)
-    party_names_2 = group2["PartyName"].tolist()
-
-    max_occurrences = max(len(party_names_1), len(party_names_2))
-
-    # Generate 'data1', 'data2', ... columns based on ALL occurrences in Excel1
-    data_columns = [f"data{i+1}" for i in range(len(party_names_1))]
-
-    for i in range(max_occurrences):
-        row = {"Account ID": acc_id, "Type": group1.iloc[0]["Type"]}
-
-        # If within Excel1 range, keep original data
-        if i < len(party_names_1):
-            row.update(group1.iloc[i].to_dict())  # Copy all columns from Excel1
-            row["party_name_ai"] = party_names_1[i]
-        else:
-            row.update({col: "" for col in excel1.columns})  # Blank out extra rows
-            row["Account ID"] = acc_id
-            row["party_name_ai"] = party_names_2[i] if i < len(party_names_2) else ""
-
-        # Assign dynamic data columns based on **all occurrences** in Excel1
-        for j, party_name in enumerate(party_names_1):
-            row[f"data{j+1}"] = f"response_data ({party_name}, {party_names_2[i]})" if i < len(party_names_2) else ""
-
-        output_rows.append(row)
-
-# Create output DataFrame
-output_df = pd.DataFrame(output_rows)
-
-# Save output to Excel
-output_df.to_excel("Processed_Output.xlsx", index=False)
-
-print("✅ Processing complete. Output saved as 'Processed_Output.xlsx'")
+    # Create new columns (data_1, data_2, ...) with empty values
+    for i in range(1, max_parties + 1):
+        gt_exec_merged[f"data_{i}"] = None  # Assign empty values
