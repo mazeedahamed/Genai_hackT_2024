@@ -6,3 +6,15 @@
     # Create new columns (data_1, data_2, ...) with empty values
     for i in range(1, max_parties + 1):
         gt_exec_merged[f"data_{i}"] = None  # Assign empty values
+
+
+
+
+    for index, row in gt_exec_merged.iterrows():
+        account_id = row["Account_ID"]
+        party_names = grouped[account_id]  # Get all Party_Names for this Account_ID
+        
+        # Fill data_X columns
+        for i, party in enumerate(party_names):
+            value = f"{party} ({row['Party_Name_AI']})" if row["Party_Name_AI"] else np.nan
+            gt_exec_merged.at[index, f"data_{i+1}"] = value
