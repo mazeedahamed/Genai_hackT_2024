@@ -18,3 +18,31 @@
         for i, party in enumerate(party_names):
             value = f"{party} ({row['Party_Name_AI']})" if row["Party_Name_AI"] else np.nan
             gt_exec_merged.at[index, f"data_{i+1}"] = value
+=========
+
+
+
+def assign_new_status(output_df):
+    output_df["new_status"] = ""
+    
+    for index, row in output_df.iterrows():
+        status = row["status"]
+        data_cols = [col for col in output_df.columns if col.startswith("data_")]
+        data_values = [row[col] for col in data_cols if pd.notna(row[col])]
+        
+        # Convert to numeric values (assuming numbers are stored as text)
+        data_values = [float(val) if str(val).replace('.', '', 1).isdigit() else 0 for val in data_values]
+        
+        if pd.notna(status) and status in ["correct and complete", "incorrect", "incomplete"]:
+            if any(val == 100 for val in data_values):
+                output_df.at[index, "new_status"] = status
+            elif all(val == 0 for val in data_values):
+                output_df.at[index, "new_status"] = "Missing" if status in ["correct and complete", "incomplete"] else "valid drop"
+        else:
+            if any(val > 0 for val in data_values):
+                max_col = data_cols[data_values.index(max(data_values))]
+                output_df.at[index, "new_status"] = f"Group - new party incorrect - {max_col}"
+            else:
+                output_df.at[index, "new_status"] = "new party incorrect"
+    
+    return output_df
