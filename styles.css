@@ -11,3 +11,51 @@
                         # Create new entry in output_rows
                         new_entry = {**row.to_dict(), **comparison}
                         output_rows.append(new_entry)
+
+
+
+
+import pandas as pd
+
+# Sample DataFrame (assuming it comes from Excel)
+data = {
+    "Account_ID": [101, 101, 101, 102, 102],
+    "Party_Name": ["add", "", "add", "xyz", "xyz"],
+    "Country": ["India", "India", "India", "USA", "USA"],
+    "Status": ["correct", "", "incomplete", "valid", "invalid"]
+}
+
+df = pd.DataFrame(data)
+
+# Combined function to process status directly
+def process_status(account_id, input_list):
+    # Extract row numbers from input (removing "score" and converting to int)
+    row_numbers = [int(item[5:]) for item in input_list if item.startswith("score")]
+
+    # Filter data for the given account_id
+    filtered_df = df[df["Account_ID"] == account_id]
+
+    # Get status values for valid row numbers (ignoring blanks)
+    status_values = [
+        filtered_df.iloc[row - 1]["Status"]
+        for row in row_numbers
+        if 0 < row <= len(filtered_df) and pd.notna(filtered_df.iloc[row - 1]["Status"])
+    ]
+
+    # Decision logic
+    if "correct" in status_values and "complete" in status_values:
+        return "Correct and complete"
+    elif "incomplete" in status_values:
+        return "Incomplete"
+    elif "incorrect" in status_values:
+        return "Incorrect"
+    else:
+        return "Unknown"  # If no relevant status found
+
+# Example usage
+account_id = 101
+input_list = ["score1", "score2", "score3"]
+
+result = process_status(account_id, input_list)
+print(result)
+
