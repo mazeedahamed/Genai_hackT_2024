@@ -1,32 +1,27 @@
-import requests
-from requests.exceptions import RequestException, Timeout, HTTPError, ConnectionError
+import pandas as pd
 
-def call_api_with_retries(api_url, payload, max_retries=3):
-    for attempt in range(1, max_retries + 1):
-        try:
-            response = requests.post(api_url, json=payload, timeout=5)
+# Load the Excel file
+file_path = "your_file.xlsx"  # Change to your file path
+df = pd.read_excel(file_path)
 
-            # Check for HTTP errors
-            response.raise_for_status()
+# Function to apply your logic
+def compare_status(expected, iteration):
+    if expected == iteration:
+        return "Pass"
+    elif expected == "additional" and pd.isna(iteration):
+        return "Pass"
+    elif expected == "additional" and iteration == "additional":
+        return "Fail"
+    elif expected == iteration and pd.isna(iteration):
+        return "Fail"
+    else:
+        return "Fail"
 
-            # Check if response has expected content (modify this check as needed)
-            if response.status_code == 200 and response.json():
-                return {"success": True, "data": response.json()}
-            else:
-                return {"success": False, "message": f"Invalid response format (Attempt {attempt})"}
+# Apply the function row-wise
+df['Result'] = df.apply(lambda row: compare_status(row['Expected'], row['Iteration']), axis=1)
 
-        except (Timeout, ConnectionError):
-            msg = f"Timeout or connection error (Attempt {attempt})"
-        except HTTPError:
-            msg = f"HTTP error: {response.status_code} (Attempt {attempt})"
-        except ValueError:
-            msg = f"Invalid JSON in response (Attempt {attempt})"
-        except RequestException as e:
-            msg = f"Request failed: {str(e)} (Attempt {attempt})"
-        except Exception as e:
-            msg = f"Unexpected error: {str(e)} (Attempt {attempt})"
+# Save the results back to Excel
+output_file = "output_with_results.xlsx"
+df.to_excel(output_file, index=False)
 
-        # Log the error message or return immediately if you want short-circuit behavior
-        print(msg)
-
-    return {"success": False, "message": "API call failed after 3 attempts"}
+print(f"Comparison done. Results saved to {output_file}")
