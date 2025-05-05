@@ -1,27 +1,20 @@
 import pandas as pd
+from datetime import datetime
 
 # Load the Excel file
-file_path = "your_file.xlsx"  # Change to your file path
-df = pd.read_excel(file_path)
+df = pd.read_excel("your_file.xlsx")
 
-# Function to apply your logic
-def compare_status(expected, iteration):
-    if expected == iteration:
-        return "Pass"
-    elif expected == "additional" and pd.isna(iteration):
-        return "Pass"
-    elif expected == "additional" and iteration == "additional":
-        return "Fail"
-    elif expected == iteration and pd.isna(iteration):
-        return "Fail"
-    else:
-        return "Fail"
+# Count values
+total_expected = (df['status'].str.lower() == 'match').sum()
+actual_match = (df['Iteration_status'].str.lower() == 'match').sum()
+additional_duplicates = df['status'].str.lower().isin(['additional', 'duplicates']).sum()
 
-# Apply the function row-wise
-df['Result'] = df.apply(lambda row: compare_status(row['Expected'], row['Iteration']), axis=1)
+# Create summary data
+summary = pd.DataFrame({
+    'Metric': ['Total Expected', 'Actual Match Status', 'Additional and Duplicates', 'Execution Time', 'Execution Env'],
+    'Value': [total_expected, actual_match, additional_duplicates, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'qa7']
+})
 
-# Save the results back to Excel
-output_file = "output_with_results.xlsx"
-df.to_excel(output_file, index=False)
-
-print(f"Comparison done. Results saved to {output_file}")
+# Save summary to new sheet in same file
+with pd.ExcelWriter("your_file.xlsx", engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+    summary.to_excel(writer, sheet_name='summary', index=False)
