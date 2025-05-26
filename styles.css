@@ -50,4 +50,13 @@ System does not support increased load or stress testing scenarios.
 🔍 Logs Verification TBD
 Log checking at each step is not yet implemented (planned for future)
 
+⚙️ No Scalability for Bot Capacity
+Current bot setup lacks support for parallel or high-volume processing.
+
+🚫 Limited Bot Throughput
+No support exists to increase capacity or manage load spikes.
+
+🔄 Single-Threaded Execution
+Bots operate sequentially; no provision for concurrent runs.
+
 
