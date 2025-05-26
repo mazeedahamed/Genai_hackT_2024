@@ -24,3 +24,30 @@ with:
 ✅ Load handling
 ✅ Auto email validation
 ✅ Expand E2E test coverage
+
+
+❗ Limited Test Data
+Testing is limited to a small, predefined set of documents.
+
+📧 Business Exception Emails
+Failure emails are sent, but logging and subjects are not validated.
+
+🧾 Manual Regression Testing
+All regression test cases are executed manually.
+
+🔁 Partial E2E Testing
+Only core functional flows are tested; broader scenarios are not covered.
+
+⚠️ Minimal Negative Testing
+Negative test cases are very limited in scope.
+
+🕵️ No Monitoring or Logging
+No support for real-time monitoring or systematic log validation.
+
+📉 No Load Testing Support
+System does not support increased load or stress testing scenarios.
+
+🔍 Logs Verification TBD
+Log checking at each step is not yet implemented (planned for future)
+
+
