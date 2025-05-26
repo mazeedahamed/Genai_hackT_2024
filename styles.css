@@ -1,20 +1,26 @@
-import pandas as pd
-from datetime import datetime
+🧱 1. Replace Text Blocks with Icons + Short Labels:
+Use icons + titles like:
 
-# Load the Excel file
-df = pd.read_excel("your_file.xlsx")
+Phase	Icon	Label
+Pre-Processing	🧪	Test Data Shared (Dev/QA)
+Triggering Bot	🎯	Manual Trigger (Orchestrator)
+Initial Bot Steps	📥	Create Queue, Validate Files
+Bot Processing	🤖	Manual E2E, Screenshots Only
+Output	📤	Manual vs Bot – NAS Output
+🟨 2. Visual Box for Challenges:
+A sidebar or colored box (e.g., orange or red) titled “Key Challenges” with icons:
 
-# Count values
-total_expected = (df['status'].str.lower() == 'match').sum()
-actual_match = (df['Iteration_status'].str.lower() == 'match').sum()
-additional_duplicates = df['status'].str.lower().isin(['additional', 'duplicates']).sum()
+❗ Limited test data
+🧾 Manual regression testing
+🕵️ No monitoring or log validation
+📉 Only negative test cases
+⏳ No load testing support
+🧩 3. Footer Box (Optional):
+Add a box:
+“What’s Missing?” or “Improvements TBD”
+with:
 
-# Create summary data
-summary = pd.DataFrame({
-    'Metric': ['Total Expected', 'Actual Match Status', 'Additional and Duplicates', 'Execution Time', 'Execution Env'],
-    'Value': [total_expected, actual_match, additional_duplicates, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'qa7']
-})
-
-# Save summary to new sheet in same file
-with pd.ExcelWriter("your_file.xlsx", engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
-    summary.to_excel(writer, sheet_name='summary', index=False)
+✅ Monitoring/Logs
+✅ Load handling
+✅ Auto email validation
+✅ Expand E2E test coverage
