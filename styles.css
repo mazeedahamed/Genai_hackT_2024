@@ -135,3 +135,91 @@ with pd.ExcelWriter("grouped_output.xlsx") as writer:
 
 print("Saved to grouped_output.xlsx with audit and group count sheets")
 
+
+
+
+
+
+
+import pandas as pd
+from rapidfuzz import fuzz
+
+# Load Excel file
+excel_file = "your_file.xlsx"  # Update with your actual file name
+df = pd.read_excel(excel_file)
+
+# Set similarity threshold
+SIMILARITY_THRESHOLD = 80
+
+all_results = []
+
+# Go through each account separately
+for account_no, account_group in df.groupby('Account no'):
+    party_names = account_group['Party name'].tolist()
+    num_parties = len(party_names)
+
+    # Step 1: Create similarity matrix
+    similarity = [[0] * num_parties for _ in range(num_parties)]
+    for i in range(num_parties):
+        for j in range(i + 1, num_parties):
+            score = fuzz.ratio(party_names[i], party_names[j])
+            similarity[i][j] = score
+            similarity[j][i] = score
+
+    # Step 2: Group parties using overlap-friendly logic
+    groups = []
+    added_to_group = [False] * num_parties
+
+    for i in range(num_parties):
+        group = set([i])
+        for j in range(num_parties):
+            if i != j and similarity[i][j] > SIMILARITY_THRESHOLD:
+                group.add(j)
+        if group not in groups:
+            groups.append(group)
+
+    # Step 3: Assign group name and number
+    seen = set()
+    unique_groups = []
+    for group in groups:
+        frozen = frozenset(group)
+        if frozen not in seen:
+            seen.add(frozen)
+            unique_groups.append(list(group))
+
+    for group_num, group_indices in enumerate(unique_groups, start=1):
+        group_parties = [party_names[i] for i in group_indices]
+
+        # Group name: pick the one with perfect match (100%) to any other
+        group_name = None
+        for i in group_indices:
+            for j in group_indices:
+                if i != j and similarity[i][j] == 100:
+                    group_name = party_names[i]
+                    break
+            if group_name:
+                break
+        if not group_name:
+            group_name = party_names[group_indices[0]]  # fallback
+
+        for i in group_indices:
+            score = 100 if party_names[i] == group_name else fuzz.ratio(party_names[i], group_name)
+            all_results.append([
+                account_no,
+                party_names[i],
+                group_name,
+                score,
+                group_num
+            ])
+
+# Final output DataFrame
+output_df = pd.DataFrame(all_results, columns=[
+    'Account no', 'Party name', 'group_name', 'score', 'group_number'
+])
+
+# Save to Excel
+output_df.to_excel("grouped_output_simple.xlsx", index=False)
+print("Saved grouped output to grouped_output_simple.xlsx")
+
+
+
