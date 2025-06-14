@@ -58,3 +58,80 @@ with pd.ExcelWriter("grouped_output.xlsx") as writer:
     group_counts.to_excel(writer, index=False, sheet_name="Group Count")
 
 print("Saved to grouped_output.xlsx with audit and group count sheets")
+
+
+
+
+
+
+
+import pandas as pd
+from rapidfuzz import fuzz
+
+# Load Excel
+df = pd.read_excel("your_file.xlsx")  # Replace with your Excel file
+
+results = []
+scores_log = []  # For audit: all scores
+
+# Process each Account no group
+for account, group_df in df.groupby('Account no'):
+    parties = group_df['Party name'].tolist()
+    assigned_group = {}  # Map party index to (group_name, score)
+
+    # Store all scores for auditing
+    for i, party_i in enumerate(parties):
+        for j, party_j in enumerate(parties):
+            if i == j:
+                continue
+            score = fuzz.ratio(party_i, party_j)
+            scores_log.append([account, party_i, party_j, score])
+
+            if score > 80:
+                # Prioritize 100 match as group leaders
+                if fuzz.ratio(party_i, party_i) == 100:
+                    group_name = party_i
+                elif fuzz.ratio(party_j, party_j) == 100:
+                    group_name = party_j
+                else:
+                    group_name = party_i  # fallback to first
+
+                # Update if new or better match
+                if i not in assigned_group or assigned_group[i][1] < score:
+                    assigned_group[i] = (group_name, score)
+                if j not in assigned_group or assigned_group[j][1] < score:
+                    assigned_group[j] = (group_name, score)
+
+    group_name_to_number = {}
+    next_group_number = 1
+
+    # Assign group or mark as self group
+    for idx, party in enumerate(parties):
+        if idx in assigned_group:
+            group_name, score = assigned_group[idx]
+        else:
+            group_name, score = party, 100
+
+        if group_name not in group_name_to_number:
+            group_name_to_number[group_name] = next_group_number
+            next_group_number += 1
+
+        group_number = group_name_to_number[group_name]
+        results.append([account, party, group_name, score, group_number])
+
+# Create output DataFrames
+final_df = pd.DataFrame(results, columns=['Account no', 'Party name', 'group_name', 'score', 'group_number'])
+audit_df = pd.DataFrame(scores_log, columns=['Account no', 'Party 1', 'Party 2', 'Score'])
+
+# Count number of unique groups per account
+group_counts = final_df.groupby('Account no')['group_name'].nunique().reset_index()
+group_counts.columns = ['Account no', 'Number of Groups']
+
+# Save to Excel with audit and group count sheet
+with pd.ExcelWriter("grouped_output.xlsx") as writer:
+    final_df.to_excel(writer, index=False, sheet_name="Grouped Output")
+    audit_df.to_excel(writer, index=False, sheet_name="Audit Scores")
+    group_counts.to_excel(writer, index=False, sheet_name="Group Count")
+
+print("Saved to grouped_output.xlsx with audit and group count sheets")
+
