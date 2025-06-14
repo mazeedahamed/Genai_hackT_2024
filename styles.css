@@ -1,62 +1,60 @@
-🧱 1. Replace Text Blocks with Icons + Short Labels:
-Use icons + titles like:
+import pandas as pd
+from rapidfuzz import fuzz
 
-Phase	Icon	Label
-Pre-Processing	🧪	Test Data Shared (Dev/QA)
-Triggering Bot	🎯	Manual Trigger (Orchestrator)
-Initial Bot Steps	📥	Create Queue, Validate Files
-Bot Processing	🤖	Manual E2E, Screenshots Only
-Output	📤	Manual vs Bot – NAS Output
-🟨 2. Visual Box for Challenges:
-A sidebar or colored box (e.g., orange or red) titled “Key Challenges” with icons:
+# Load Excel
+df = pd.read_excel("your_file.xlsx")  # Replace with your Excel file
 
-❗ Limited test data
-🧾 Manual regression testing
-🕵️ No monitoring or log validation
-📉 Only negative test cases
-⏳ No load testing support
-🧩 3. Footer Box (Optional):
-Add a box:
-“What’s Missing?” or “Improvements TBD”
-with:
+results = []
+scores_log = []  # For audit: all scores
 
-✅ Monitoring/Logs
-✅ Load handling
-✅ Auto email validation
-✅ Expand E2E test coverage
+# Process each Account no group
+for account, group_df in df.groupby('Account no'):
+    parties = group_df['Party name'].tolist()
+    assigned_group = {}  # Map party index to (group_name, score)
 
+    # Store all scores for auditing
+    for i, party_i in enumerate(parties):
+        for j, party_j in enumerate(parties):
+            if i == j:
+                continue
+            score = fuzz.ratio(party_i, party_j)
+            scores_log.append([account, party_i, party_j, score])
 
-❗ Limited Test Data
-Testing is limited to a small, predefined set of documents.
+            if score > 80:
+                # Prioritize 100 match as group leaders
+                if fuzz.ratio(party_i, party_i) == 100:
+                    group_name = party_i
+                elif fuzz.ratio(party_j, party_j) == 100:
+                    group_name = party_j
+                else:
+                    group_name = party_i  # fallback to first
 
-📧 Business Exception Emails
-Failure emails are sent, but logging and subjects are not validated.
+                # Update if new or better match
+                if i not in assigned_group or assigned_group[i][1] < score:
+                    assigned_group[i] = (group_name, score)
+                if j not in assigned_group or assigned_group[j][1] < score:
+                    assigned_group[j] = (group_name, score)
 
-🧾 Manual Regression Testing
-All regression test cases are executed manually.
+    # Assign group or mark as self group
+    for idx, party in enumerate(parties):
+        if idx in assigned_group:
+            group_name, score = assigned_group[idx]
+        else:
+            group_name, score = party, 100
+        results.append([account, party, group_name, score])
 
-🔁 Partial E2E Testing
-Only core functional flows are tested; broader scenarios are not covered.
+# Create output DataFrames
+final_df = pd.DataFrame(results, columns=['Account no', 'Party name', 'group_name', 'score'])
+audit_df = pd.DataFrame(scores_log, columns=['Account no', 'Party 1', 'Party 2', 'Score'])
 
-⚠️ Minimal Negative Testing
-Negative test cases are very limited in scope.
+# Count number of unique groups per account
+group_counts = final_df.groupby('Account no')['group_name'].nunique().reset_index()
+group_counts.columns = ['Account no', 'Number of Groups']
 
-🕵️ No Monitoring or Logging
-No support for real-time monitoring or systematic log validation.
+# Save to Excel with audit and group count sheet
+with pd.ExcelWriter("grouped_output.xlsx") as writer:
+    final_df.to_excel(writer, index=False, sheet_name="Grouped Output")
+    audit_df.to_excel(writer, index=False, sheet_name="Audit Scores")
+    group_counts.to_excel(writer, index=False, sheet_name="Group Count")
 
-📉 No Load Testing Support
-System does not support increased load or stress testing scenarios.
-
-🔍 Logs Verification TBD
-Log checking at each step is not yet implemented (planned for future)
-
-⚙️ No Scalability for Bot Capacity
-Current bot setup lacks support for parallel or high-volume processing.
-
-🚫 Limited Bot Throughput
-No support exists to increase capacity or manage load spikes.
-
-🔄 Single-Threaded Execution
-Bots operate sequentially; no provision for concurrent runs.
-
-
+print("Saved to grouped_output.xlsx with audit and group count sheets")
