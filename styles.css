@@ -327,3 +327,120 @@ print("Saved grouped output with all sheets and summary to grouped_output_with_a
                 best_match_count = match_count
                 group_name = candidate
 
+
+
+import pandas as pd
+from rapidfuzz import fuzz
+from collections import defaultdict, deque
+
+# Load all sheets
+excel_file = "your_file.xlsx"
+sheets = pd.read_excel(excel_file, sheet_name=None)
+
+# Sheet to process
+sheet_to_group = "Sheet1"  # Change to the actual sheet name
+df = sheets[sheet_to_group]
+
+# Set similarity threshold
+SIMILARITY_THRESHOLD = 80
+
+# Prepare new columns to store results
+df['group_name'] = None
+df['group_number'] = None
+df['score'] = None
+
+# Group processing
+for account_no, account_group in df.groupby('Account no'):
+    # Filter out rows with blank 'Party name' for processing
+    account_group_nonblank = account_group[account_group['Party name'].notna() & (account_group['Party name'].str.strip() != '')]
+    party_names = account_group_nonblank['Party name'].tolist()
+    num_parties = len(party_names)
+
+    if num_parties == 0:
+        continue
+
+    # Step 1: Build full similarity matrix
+    similarity = [[0] * num_parties for _ in range(num_parties)]
+    for i in range(num_parties):
+        for j in range(i + 1, num_parties):
+            score = fuzz.token_set_ratio(party_names[i], party_names[j])
+            similarity[i][j] = score
+            similarity[j][i] = score
+
+    # Step 2: Build graph only if all pairwise scores in group meet threshold
+    graph = defaultdict(set)
+    for i in range(num_parties):
+        for j in range(i + 1, num_parties):
+            if similarity[i][j] >= SIMILARITY_THRESHOLD:
+                graph[i].add(j)
+                graph[j].add(i)
+
+    # Step 3: Find connected components (transitive groups)
+    visited = [False] * num_parties
+    raw_groups = []
+    for i in range(num_parties):
+        if not visited[i]:
+            queue = deque([i])
+            group = []
+            while queue:
+                node = queue.popleft()
+                if not visited[node]:
+                    visited[node] = True
+                    group.append(node)
+                    queue.extend(graph[node])
+            raw_groups.append(group)
+
+    # Step 4: Filter groups to ensure all pairwise scores >= threshold
+    filtered_groups = []
+    for group in raw_groups:
+        valid = True
+        for i in range(len(group)):
+            for j in range(i + 1, len(group)):
+                if similarity[group[i]][group[j]] < SIMILARITY_THRESHOLD:
+                    valid = False
+                    break
+            if not valid:
+                break
+        if valid:
+            filtered_groups.append(group)
+        else:
+            # Split invalid group into individual single-member groups
+            for idx in group:
+                filtered_groups.append([idx])
+
+    # Step 5: Assign results directly into df
+    for group_num, group_indices in enumerate(filtered_groups, start=1):
+        group_parties = [party_names[i] for i in group_indices]
+
+        # Determine group name as the one matched to most others >= threshold
+        best_match_count = -1
+        group_name = group_parties[0]
+        for candidate in group_parties:
+            match_count = sum(1 for other in group_parties if candidate != other and fuzz.token_set_ratio(candidate, other) >= SIMILARITY_THRESHOLD)
+            if match_count > best_match_count:
+                best_match_count = match_count
+                group_name = candidate
+
+        # Update original DataFrame rows
+        for i in group_indices:
+            row_index = account_group_nonblank.index[i]  # Get index in original df
+            score = 100 if party_names[i] == group_name else fuzz.token_set_ratio(party_names[i], group_name)
+            df.loc[row_index, 'group_name'] = group_name
+            df.loc[row_index, 'group_number'] = group_num
+            df.loc[row_index, 'score'] = score
+
+# Step: Summary of group counts per account
+summary_df = df[['Account no', 'group_number']].drop_duplicates()
+group_counts = summary_df.groupby('Account no')['group_number'].nunique().reset_index()
+group_counts.columns = ['Account no', 'number_of_groups']
+
+# Update sheets dictionary
+sheets[sheet_to_group] = df
+sheets['Group Summary'] = group_counts
+
+# Save all sheets to new file
+with pd.ExcelWriter("grouped_output_with_all_sheets.xlsx", engine='openpyxl') as writer:
+    for sheet_name, sheet_df in sheets.items():
+        sheet_df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+print("Saved grouped output with all sheets and summary to grouped_output_with_all_sheets.xlsx")
