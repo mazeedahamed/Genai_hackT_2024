@@ -555,3 +555,12 @@ with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
 
 print(f"✅ Saved grouped output to {output_file}")
 
+
+    print("Identified Groups:")
+    for idx, group in enumerate(unique_groups, 1):
+        print(f"  Group {idx}: {[party_names[i] for i in group]}")
+
+    print("High Match Count per Index:", high_match_count)
+    for i in range(num_parties):
+        print(f"  '{party_names[i]}' has {high_match_count[i]} high matches")
+
