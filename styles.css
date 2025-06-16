@@ -222,4 +222,93 @@ output_df.to_excel("grouped_output_simple.xlsx", index=False)
 print("Saved grouped output to grouped_output_simple.xlsx")
 
 
+import pandas as pd
+from rapidfuzz import fuzz
+from collections import defaultdict, deque
+
+# Load all sheets
+excel_file = "your_file.xlsx"
+sheets = pd.read_excel(excel_file, sheet_name=None)
+
+# Sheet to process
+sheet_to_group = "Sheet1"  # Change to the actual sheet name
+df = sheets[sheet_to_group]
+
+# Set similarity threshold
+SIMILARITY_THRESHOLD = 80
+
+# Prepare new columns to store results
+df['group_name'] = None
+df['group_number'] = None
+df['score'] = None
+
+# Group processing
+for account_no, account_group in df.groupby('Account no'):
+    party_names = account_group['Party name'].tolist()
+    num_parties = len(party_names)
+
+    # Step 1: Build graph of similarities
+    graph = defaultdict(set)
+    for i in range(num_parties):
+        for j in range(i + 1, num_parties):
+            score = fuzz.token_set_ratio(party_names[i], party_names[j])
+            if score > SIMILARITY_THRESHOLD:
+                graph[i].add(j)
+                graph[j].add(i)
+
+    # Step 2: Find connected components (transitive groups)
+    visited = [False] * num_parties
+    unique_groups = []
+
+    for i in range(num_parties):
+        if not visited[i]:
+            queue = deque([i])
+            group = []
+            while queue:
+                node = queue.popleft()
+                if not visited[node]:
+                    visited[node] = True
+                    group.append(node)
+                    queue.extend(graph[node])
+            unique_groups.append(group)
+
+    # Step 3: Assign results directly into df
+    for group_num, group_indices in enumerate(unique_groups, start=1):
+        group_parties = [party_names[i] for i in group_indices]
+
+        # Determine group name
+        group_name = None
+        for i in group_indices:
+            for j in group_indices:
+                if i != j and fuzz.token_set_ratio(party_names[i], party_names[j]) == 100:
+                    group_name = party_names[i]
+                    break
+            if group_name:
+                break
+        if not group_name:
+            group_name = party_names[group_indices[0]]
+
+        # Update original DataFrame rows
+        for i in group_indices:
+            row_index = account_group.index[i]  # Get index in original df
+            score = 100 if party_names[i] == group_name else fuzz.token_set_ratio(party_names[i], group_name)
+            df.loc[row_index, 'group_name'] = group_name
+            df.loc[row_index, 'group_number'] = group_num
+            df.loc[row_index, 'score'] = score
+
+# Step: Summary of group counts per account
+summary_df = df[['Account no', 'group_number']].drop_duplicates()
+group_counts = summary_df.groupby('Account no')['group_number'].nunique().reset_index()
+group_counts.columns = ['Account no', 'number_of_groups']
+
+# Update sheets dictionary
+sheets[sheet_to_group] = df
+sheets['Group Summary'] = group_counts
+
+# Save all sheets to new file
+with pd.ExcelWriter("grouped_output_with_all_sheets.xlsx", engine='openpyxl') as writer:
+    for sheet_name, sheet_df in sheets.items():
+        sheet_df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+print("Saved grouped output with all sheets and summary to grouped_output_with_all_sheets.xlsx")
 
