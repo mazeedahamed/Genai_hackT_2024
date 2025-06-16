@@ -1,52 +1,103 @@
+# Transitive fuzzy grouping with detailed debug logging
 import pandas as pd
-import re
+from rapidfuzz import fuzz
+from collections import defaultdict, deque
 
-def extract_inside_data(symbol):
-    match = re.search(r'\((.*?)\)', symbol)
-    return match.group(1) if match else None
+# Load all sheets
+excel_file = "your_file.xlsx"  # Replace with actual file
+sheets = pd.read_excel(excel_file, sheet_name=None)
 
-def count_matched_fields(actual_values, ground_truth):
-    return sum(1 for col in actual_values if actual_values[col] and ground_truth[col] in actual_values[col])
+# Choose sheet to group
+sheet_to_group = "Sheet1"  # Change if needed
+df = sheets[sheet_to_group]
 
-# Load Excel file
-df = pd.read_excel("your_file.xlsx")
+# Parameters
+SIMILARITY_THRESHOLD = 80
 
-# Step 1: Filter rows starting with "Duplicate("
-df["inside_data"] = df["Symbol"].apply(lambda x: extract_inside_data(x) if x.startswith("Duplicate(") else x)
+# Prepare output columns
+df['group_name'] = None
+df['group_number'] = None
+df['score'] = None
 
-duplicates_df = df[df["Symbol"].str.startswith("Duplicate(")]
-inside_df = df[~df["Symbol"].str.startswith("Duplicate(")]
+# Process each Account no group
+for account_no, account_group in df.groupby('Account no'):
+    print(f"\nProcessing Account no: {account_no}")
 
-# Step 2: Group by inside_data and count occurrences
-grouped = df.groupby("inside_data").size().reset_index(name="total_occurrences")
+    account_group_nonblank = account_group[account_group['Party name'].notna() & (account_group['Party name'].str.strip() != '')]
+    party_names = account_group_nonblank['Party name'].str.strip().tolist()
+    num_parties = len(party_names)
 
-# Step 3: Extract ground truth values and calculate matched-inside-data
-inside_df["matched_count"] = inside_df.apply(lambda row: count_matched_fields(
-    {"Actual Description": row["Actual Description"],
-     "Actual Date": row["Actual Date"],
-     "Actual Quantity": row["Actual Quantity"]},
-    {"Actual Description": row["Description"],
-     "Actual Date": row["Date"],
-     "Actual Quantity": row["Quantity"]}), axis=1)
+    print("Party Names:", party_names)
 
-# Step 4: Calculate duplicate matched records
-duplicates_df["matched_count"] = duplicates_df.apply(lambda row: count_matched_fields(
-    {"Actual Description": row["Actual Description"],
-     "Actual Date": row["Actual Date"],
-     "Actual Quantity": row["Actual Quantity"]},
-    {"Actual Description": inside_df.loc[inside_df["inside_data"] == row["inside_data"], "Description"].values[0],
-     "Actual Date": inside_df.loc[inside_df["inside_data"] == row["inside_data"], "Date"].values[0],
-     "Actual Quantity": inside_df.loc[inside_df["inside_data"] == row["inside_data"], "Quantity"].values[0]}), axis=1)
+    if num_parties == 0:
+        continue
 
-# Step 5: Determine the best-matched row
-for inside_value in inside_df["inside_data"].unique():
-    matched_inside = inside_df.loc[inside_df["inside_data"] == inside_value, "matched_count"].values[0]
-    duplicate_matches = duplicates_df.loc[duplicates_df["inside_data"] == inside_value, "matched_count"]
-    
-    if not duplicate_matches.empty and duplicate_matches.max() > matched_inside:
-        best_match_row = duplicates_df.loc[duplicates_df["inside_data"] == inside_value].nlargest(1, "matched_count")
-        inside_df.loc[inside_df["inside_data"] == inside_value, ["Actual Description", "Actual Date", "Actual Quantity"]] = \
-            best_match_row[["Actual Description", "Actual Date", "Actual Quantity"]].values
+    # Step 1: Build similarity graph
+    graph = defaultdict(set)
+    for i in range(num_parties):
+        for j in range(i + 1, num_parties):
+            score = fuzz.token_set_ratio(party_names[i], party_names[j])
+            print(f"Similarity between '{party_names[i]}' and '{party_names[j]}' = {score}")
+            if score >= SIMILARITY_THRESHOLD:
+                graph[i].add(j)
+                graph[j].add(i)
 
-# Save the updated dataframe to a new Excel file
-inside_df.to_excel("updated_data.xlsx", index=False)
+    # Step 2: Find connected components
+    visited = [False] * num_parties
+    unique_groups = []
+
+    for i in range(num_parties):
+        if not visited[i]:
+            queue = deque([i])
+            group = []
+            while queue:
+                node = queue.popleft()
+                if not visited[node]:
+                    visited[node] = True
+                    group.append(node)
+                    queue.extend(graph[node])
+            unique_groups.append(group)
+
+    # Step 3: Assign group name and update df
+    for group_number, group_indices in enumerate(unique_groups, start=1):
+        group_parties = [party_names[i] for i in group_indices]
+
+        # Determine best group name
+        best_match_count = -1
+        group_name = group_parties[0]
+        for candidate in group_parties:
+            match_count = sum(
+                1 for other in group_parties if candidate != other and fuzz.token_set_ratio(candidate, other) >= SIMILARITY_THRESHOLD
+            )
+            print(f"      Candidate '{candidate}' matched with {match_count} others")
+            if match_count > best_match_count:
+                best_match_count = match_count
+                group_name = candidate
+
+        print(f"  ✅ Final Group {group_number} name: '{group_name}'")
+
+        for i in group_indices:
+            name = party_names[i]
+            row_index = account_group_nonblank.index[i]
+            score = 100 if name == group_name else fuzz.token_set_ratio(name, group_name)
+            print(f"      Assigning '{name}' to group {group_number} with score {score}")
+            df.loc[row_index, 'group_name'] = group_name
+            df.loc[row_index, 'group_number'] = group_number
+            df.loc[row_index, 'score'] = score
+
+# Summary sheet
+summary_df = df[['Account no', 'group_number']].drop_duplicates()
+group_counts = summary_df.groupby('Account no')['group_number'].nunique().reset_index()
+group_counts.columns = ['Account no', 'number_of_groups']
+
+# Update sheets
+sheets[sheet_to_group] = df
+sheets['Group Summary'] = group_counts
+
+# Save output
+output_file = "grouped_output_with_all_sheets.xlsx"
+with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+    for sheet_name, sheet_df in sheets.items():
+        sheet_df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+print(f"\n✅ Saved grouped output to {output_file}")
