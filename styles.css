@@ -312,3 +312,18 @@ with pd.ExcelWriter("grouped_output_with_all_sheets.xlsx", engine='openpyxl') as
 
 print("Saved grouped output with all sheets and summary to grouped_output_with_all_sheets.xlsx")
 
+
+
+
+
+
+
+# Determine group name as the one matched to most others >= threshold
+        best_match_count = -1
+        group_name = group_parties[0]
+        for candidate in group_parties:
+            match_count = sum(1 for other in group_parties if candidate != other and fuzz.token_set_ratio(candidate, other) >= SIMILARITY_THRESHOLD)
+            if match_count > best_match_count:
+                best_match_count = match_count
+                group_name = candidate
+
