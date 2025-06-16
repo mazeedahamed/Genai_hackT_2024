@@ -444,3 +444,114 @@ with pd.ExcelWriter("grouped_output_with_all_sheets.xlsx", engine='openpyxl') as
         sheet_df.to_excel(writer, sheet_name=sheet_name, index=False)
 
 print("Saved grouped output with all sheets and summary to grouped_output_with_all_sheets.xlsx")
+
+
+import pandas as pd
+from rapidfuzz import fuzz
+from collections import defaultdict, deque
+
+# Load all sheets
+excel_file = "your_file.xlsx"  # Replace with your actual file
+sheets = pd.read_excel(excel_file, sheet_name=None)
+
+# Choose sheet to group
+sheet_to_group = "Sheet1"  # Change if needed
+df = sheets[sheet_to_group]
+
+# Parameters
+SIMILARITY_THRESHOLD = 80
+MIN_MATCHES = 2  # Require at least 2 strong matches to be considered for grouping
+
+# Prepare output columns
+df['group_name'] = None
+df['group_number'] = None
+df['score'] = None
+
+# Process each Account no group
+for account_no, account_group in df.groupby('Account no'):
+
+    account_group_nonblank = account_group[account_group['Party name'].notna() & (account_group['Party name'].str.strip() != '')]
+    party_names = account_group_nonblank['Party name'].str.strip().tolist()
+    num_parties = len(party_names)
+
+    if num_parties == 0:
+        continue
+
+    # Step 1: Precompute scores between all pairs
+    score_matrix = {}
+    for i in range(num_parties):
+        for j in range(i + 1, num_parties):
+            score = fuzz.token_set_ratio(party_names[i], party_names[j])
+            score_matrix[(i, j)] = score
+            score_matrix[(j, i)] = score
+
+    # Step 2: Count high matches for each name
+    high_match_count = {i: 0 for i in range(num_parties)}
+    for (i, j), score in score_matrix.items():
+        if score >= SIMILARITY_THRESHOLD:
+            high_match_count[i] += 1
+
+    # Step 3: Build graph only between strong members
+    graph = defaultdict(set)
+    for (i, j), score in score_matrix.items():
+        if score >= SIMILARITY_THRESHOLD and high_match_count[i] >= MIN_MATCHES and high_match_count[j] >= MIN_MATCHES:
+            graph[i].add(j)
+            graph[j].add(i)
+
+    # Step 4: Find connected components (groups)
+    visited = [False] * num_parties
+    unique_groups = []
+    for i in range(num_parties):
+        if not visited[i]:
+            queue = deque([i])
+            group = []
+            while queue:
+                node = queue.popleft()
+                if not visited[node]:
+                    visited[node] = True
+                    group.append(node)
+                    queue.extend(graph[node])
+            unique_groups.append(group)
+
+    # Step 5: Assign group name and scores
+    for group_num, group_indices in enumerate(unique_groups, start=1):
+        group_parties = [party_names[i] for i in group_indices]
+
+        # Choose best group name (matched with most others)
+        best_match_count = -1
+        group_name = group_parties[0]
+        for candidate in group_parties:
+            match_count = sum(
+                1 for other in group_parties
+                if candidate != other and fuzz.token_set_ratio(candidate, other) >= SIMILARITY_THRESHOLD
+            )
+            if match_count > best_match_count:
+                best_match_count = match_count
+                group_name = candidate
+
+        # Assign to DataFrame
+        for i in group_indices:
+            row_index = account_group_nonblank.index[i]
+            name = party_names[i]
+            score = 100 if name == group_name else fuzz.token_set_ratio(name, group_name)
+            df.loc[row_index, 'group_name'] = group_name
+            df.loc[row_index, 'group_number'] = group_num
+            df.loc[row_index, 'score'] = score
+
+# Summary sheet: how many groups per account
+summary_df = df[['Account no', 'group_number']].drop_duplicates()
+group_counts = summary_df.groupby('Account no')['group_number'].nunique().reset_index()
+group_counts.columns = ['Account no', 'number_of_groups']
+
+# Update sheets
+sheets[sheet_to_group] = df
+sheets['Group Summary'] = group_counts
+
+# Save to output Excel
+output_file = "grouped_output_with_all_sheets.xlsx"
+with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+    for sheet_name, sheet_df in sheets.items():
+        sheet_df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+print(f"✅ Saved grouped output to {output_file}")
+
