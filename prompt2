@@ -101,3 +101,26 @@ with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
         sheet_df.to_excel(writer, sheet_name=sheet_name, index=False)
 
 print(f"\n✅ Saved grouped output to {output_file}")
+
+
+
+ # Filter only those directly similar to group_name
+    filtered_indices = []
+    for i in group_indices:
+        name = party_names[i]
+        score = fuzz.token_set_ratio(name, group_name)
+        if score >= SIMILARITY_THRESHOLD:
+            filtered_indices.append(i)
+        else:
+            print(f"  ❌ '{name}' removed from group {group_number} due to low direct match ({score}) with '{group_name}'")
+
+    # Assign only filtered rows to group
+    for i in filtered_indices:
+        name = party_names[i]
+        row_index = account_group_nonblank.index[i]
+        score = 100 if name == group_name else fuzz.token_set_ratio(name, group_name)
+        print(f"      Assigning '{name}' to group {group_number} with score {score}")
+        df.loc[row_index, 'group_name'] = group_name
+        df.loc[row_index, 'group_number'] = group_number
+        df.loc[row_index, 'score'] = score
+
