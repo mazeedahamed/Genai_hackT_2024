@@ -1,126 +1,108 @@
-# Transitive fuzzy grouping with detailed debug logging
 import pandas as pd
 from rapidfuzz import fuzz
-from collections import defaultdict, deque
+from collections import defaultdict
 
 # Load all sheets
-excel_file = "your_file.xlsx"  # Replace with actual file
+excel_file = "your_file.xlsx"  # Replace with actual file path
 sheets = pd.read_excel(excel_file, sheet_name=None)
 
-# Choose sheet to group
-sheet_to_group = "Sheet1"  # Change if needed
+# Sheet to process
+sheet_to_group = "Sheet1"
 df = sheets[sheet_to_group]
 
-# Parameters
+# Similarity threshold
 SIMILARITY_THRESHOLD = 80
 
-# Prepare output columns
+# Initialize columns
 df['group_name'] = None
 df['group_number'] = None
 df['score'] = None
 
-# Process each Account no group
-for account_no, account_group in df.groupby('Account no'):
-    print(f"\nProcessing Account no: {account_no}")
-
-    account_group_nonblank = account_group[account_group['Party name'].notna() & (account_group['Party name'].str.strip() != '')]
-    party_names = account_group_nonblank['Party name'].str.strip().tolist()
-    num_parties = len(party_names)
-
-    print("Party Names:", party_names)
-
-    if num_parties == 0:
+# Grouping logic per Account no
+for account_no, group_df in df.groupby('Account no'):
+    print(f"\n🔍 Processing Account no: {account_no}")
+    
+    # Work on copy
+    temp_df = group_df.copy()
+    temp_df = temp_df[temp_df['Party name'].notna() & (temp_df['Party name'].str.strip() != '')]
+    names = temp_df['Party name'].tolist()
+    indices = temp_df.index.tolist()
+    
+    # Skip if fewer than 1
+    if not names:
         continue
 
-    # Step 1: Build similarity graph
-    graph = defaultdict(set)
-    for i in range(num_parties):
-        for j in range(i + 1, num_parties):
-            score = fuzz.token_set_ratio(party_names[i], party_names[j])
-            print(f"Similarity between '{party_names[i]}' and '{party_names[j]}' = {score}")
-            if score >= SIMILARITY_THRESHOLD:
-                graph[i].add(j)
-                graph[j].add(i)
+    # Precompute all pairwise scores
+    n = len(names)
+    pair_scores = defaultdict(dict)
+    for i in range(n):
+        for j in range(i+1, n):
+            score = fuzz.token_set_ratio(names[i], names[j])
+            pair_scores[i][j] = score
+            pair_scores[j][i] = score
 
-    # Step 2: Find connected components
-    visited = [False] * num_parties
-    unique_groups = []
+    grouped = set()
+    group_num = 1
 
-    for i in range(num_parties):
-        if not visited[i]:
-            queue = deque([i])
-            group = []
-            while queue:
-                node = queue.popleft()
-                if not visited[node]:
-                    visited[node] = True
-                    group.append(node)
-                    queue.extend(graph[node])
-            unique_groups.append(group)
-
-    # Step 3: Assign group name and update df
-    for group_number, group_indices in enumerate(unique_groups, start=1):
-        group_parties = [party_names[i] for i in group_indices]
-
-        # Determine best group name
+    while len(grouped) < n:
+        best_candidate = None
+        best_matches = []
         best_match_count = -1
-        group_name = group_parties[0]
-        for candidate in group_parties:
-            match_count = sum(
-                1 for other in group_parties if candidate != other and fuzz.token_set_ratio(candidate, other) >= SIMILARITY_THRESHOLD
-            )
-            print(f"      Candidate '{candidate}' matched with {match_count} others")
-            if match_count > best_match_count:
+        best_total_score = -1
+
+        print(f"\n🔄 Looking for best candidate in group {group_num}...")
+
+        for i in range(n):
+            if i in grouped:
+                continue
+            matches = []
+            total_score = 0
+            for j in range(n):
+                if j != i and j not in grouped:
+                    score = pair_scores[i].get(j, 0)
+                    if score >= SIMILARITY_THRESHOLD:
+                        matches.append(j)
+                        total_score += score
+            match_count = len(matches)
+            match_names = [names[j] for j in matches]
+            print(f"  ➤ Candidate: '{names[i]}' → Matches: {match_names} (Count: {match_count}, Score: {total_score})")
+
+            if (match_count > best_match_count) or (
+                match_count == best_match_count and total_score > best_total_score):
+                best_candidate = i
+                best_matches = matches
                 best_match_count = match_count
-                group_name = candidate
+                best_total_score = total_score
 
-        print(f"  ✅ Final Group {group_number} name: '{group_name}'")
+        current_group = [best_candidate] + best_matches
+        group_name = names[best_candidate]
+        print(f"\n✅ Selected Group {group_num} Name: '{group_name}'")
+        print("   → Group Members:")
+        for idx in current_group:
+            print(f"     • {names[idx]}")
 
-        for i in group_indices:
-            name = party_names[i]
-            row_index = account_group_nonblank.index[i]
+        for idx in current_group:
+            row_idx = indices[idx]
+            name = names[idx]
             score = 100 if name == group_name else fuzz.token_set_ratio(name, group_name)
-            print(f"      Assigning '{name}' to group {group_number} with score {score}")
-            df.loc[row_index, 'group_name'] = group_name
-            df.loc[row_index, 'group_number'] = group_number
-            df.loc[row_index, 'score'] = score
+            df.loc[row_idx, 'group_name'] = group_name
+            df.loc[row_idx, 'group_number'] = group_num
+            df.loc[row_idx, 'score'] = score
+            grouped.add(idx)
 
-# Summary sheet
+        group_num += 1
+
+# Summary: number of groups per account
 summary_df = df[['Account no', 'group_number']].drop_duplicates()
 group_counts = summary_df.groupby('Account no')['group_number'].nunique().reset_index()
 group_counts.columns = ['Account no', 'number_of_groups']
 
-# Update sheets
+# Save all sheets back
 sheets[sheet_to_group] = df
 sheets['Group Summary'] = group_counts
 
-# Save output
-output_file = "grouped_output_with_all_sheets.xlsx"
-with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+with pd.ExcelWriter("grouped_output_with_all_sheets.xlsx", engine='openpyxl') as writer:
     for sheet_name, sheet_df in sheets.items():
         sheet_df.to_excel(writer, sheet_name=sheet_name, index=False)
 
-print(f"\n✅ Saved grouped output to {output_file}")
-
-
-
- # Filter only those directly similar to group_name
-    filtered_indices = []
-    for i in group_indices:
-        name = party_names[i]
-        score = fuzz.token_set_ratio(name, group_name)
-        if score >= SIMILARITY_THRESHOLD:
-            filtered_indices.append(i)
-        else:
-            print(f"  ❌ '{name}' removed from group {group_number} due to low direct match ({score}) with '{group_name}'")
-
-    # Assign only filtered rows to group
-    for i in filtered_indices:
-        name = party_names[i]
-        row_index = account_group_nonblank.index[i]
-        score = 100 if name == group_name else fuzz.token_set_ratio(name, group_name)
-        print(f"      Assigning '{name}' to group {group_number} with score {score}")
-        df.loc[row_index, 'group_name'] = group_name
-        df.loc[row_index, 'group_number'] = group_number
-        df.loc[row_index, 'score'] = score
-
+print("\n✅ Grouping complete and saved to 'grouped_output_with_all_sheets.xlsx'")
