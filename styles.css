@@ -1,30 +1,109 @@
-def generate_account_level_view(df1, df2):
-    # Normalize columns and string values
-    df1.columns = df1.columns.str.lower()
-    df1 = df1.applymap(lambda x: x.lower() if isinstance(x, str) else x)
+Here's your **latest working version of the full prompt**, updated with all necessary clarifications — ready to copy and use as a **structured, comprehensive prompt** to feed into GPT or any LLM:
 
-    df2.columns = df2.columns.str.lower()
-    df2 = df2.applymap(lambda x: x.lower() if isinstance(x, str) else x)
-    df2['account_no'] = df2['group_no'].apply(lambda x: '-'.join(x.split('-')[:3]))
+---
 
-    # --- df1: Group and explode statuses ---
-    df1_grouped = df1.groupby('account_no')['grouped party status_gt'].agg(list).explode().reset_index()
-    df1_counts = pd.crosstab(df1_grouped['account_no'], df1_grouped['grouped party status_gt'])
-    df1_counts.columns = [f'df1_{col}' for col in df1_counts.columns]
-    df1_counts = df1_counts.reset_index()
+### ✅ **Final Prompt: Apica HTML Converter**
 
-    # --- df2: Group and explode statuses ---
-    df2_grouped = df2.groupby('account_no')['new_status'].agg(list).explode().reset_index()
-    df2_counts = pd.crosstab(df2_grouped['account_no'], df2_grouped['new_status'])
-    df2_counts.columns = [f'df2_{col}' for col in df2_counts.columns]
-    df2_counts = df2_counts.reset_index()
+---
 
-    # --- Merge both summaries ---
-    merged = pd.merge(df1_counts, df2_counts, on='account_no', how='outer').fillna(0)
+**Objective:**
+Convert a Selenium or Playwright automation project into an Apica.io-compatible HTML table format for UI automation testing. The output must be structured using `<tr><td>…</td><td>…</td><td>…</td></tr>` to represent each action step in an executable format for RFB (ASM) scenarios in Apica.
 
-    # Ensure all values are int
-    for col in merged.columns:
-        if col != 'account_no':
-            merged[col] = merged[col].astype(int)
+---
 
-    return merged
+**Input Details:**
+
+* **Step Text:** A step line from `.feature` file (e.g., `And user clicks on Submit button`).
+* **Traced Metadata:** For the given step, full traced metadata will be passed including:
+
+  * The main step definition function and its body.
+  * Any helper or nested functions it calls.
+  * Page object locators (from `.java`, `.ts`, `.page`, or config files).
+  * Control flows such as `if`, `else`, `switch`, `for`, and `while` blocks.
+
+---
+
+**Expected Output:**
+
+Each final action should be converted into a clean HTML row with the following format:
+
+```html
+<tr><td>[Command]</td><td>[Locator]</td><td>[Value / JavaScript]</td></tr>
+```
+
+* `Command`: Must be strictly selected from the Apica command dictionary below.
+* `Locator`: Cleaned valid XPath or CSS selector used in the step.
+* `Value`: Text input, verification string, delay (in ms), or JavaScript code for `runScriptAndWait`.
+
+---
+
+**Locator Cleaning Rules:**
+
+* Strip invalid prefixes like `css=`, `xpath=`, or malformed syntax.
+* Examples:
+
+  * `css= search-input` → `search-input`
+  * `//campfire-enterprise-button)[2]` → `//campfire-enterprise-button`
+  * `iisBranchSupport_root_No=css:input[value='No']` → `input[value='No']`
+
+---
+
+**Unsupported Actions Handling:**
+
+If any action in the step or helper method is **not directly supported** by Apica:
+
+1. Convert the behavior into JavaScript.
+2. Use the Apica command: `runScriptAndWait`
+3. Insert the JavaScript code in the `<td>` Value cell.
+4. Add a `<tr><td>pause</td><td></td><td>TIME_IN_MS</td></tr>` **only** if there is an explicit wait (like `Thread.sleep`, `timeout`, `wait`) in the code.
+
+> Example:
+
+```java
+for (int i = 0; i < 4; i++) {
+  robot.keyPress(KeyEvent.VK_CONTROL);
+  robot.keyPress(KeyEvent.VK_MINUS);
+  robot.keyRelease(KeyEvent.VK_CONTROL);
+  robot.keyRelease(KeyEvent.VK_MINUS);
+}
+Thread.sleep(1000);
+```
+
+> Output:
+
+```html
+<tr><td>runScriptAndWait</td><td></td><td>document.body.style.zoom = '67%';</td></tr>
+<tr><td>pause</td><td></td><td>1000</td></tr>
+```
+
+---
+
+**Command Mapping Reference (Allowed Commands Only):**
+
+```json
+{
+  "Command": {
+    "Actions": ["open", "clickAndWait", "clickAtAndwait", "click", "clickAt", "type", "sendKeys", "selectWindow", "submit"],
+    "Keyboard_Mouse_interaction": ["keyDown", "keyDownAndWait", "keyPress", "keyPressAndWait", "typeKeys", "select", "selectAndWait", "selectFrame", "keyUp", "keyUpAndWait", "mouseOver"],
+    "Verification_and_Assertion": ["assertElementPresent", "assertTitle", "assertNotAttribute", "assertValue", "assertNotValue", "assertText", "assertLocation", "assertVisible", "assertElementNotPresent", "assertNotVisible", "assertAttribute", "assertTextNotPresent", "assertTextPresent", "assertExpression", "assertNextConfirmation", "assertNextAlert", "assertAlert", "assertConfirmation", "assertEval", "verifyTitle", "verifyLocation", "verifyElementPresent", "verifyVisible", "verifyElementNotPresent", "verifyNotVisible", "verifyAttribute", "verifyNotAttribute", "verifyValue", "verifyNotValue", "verifyText", "verifyTextNotPresent", "verifyTextPresent", "verifyExpression"],
+    "Waits": ["waitForVisible", "waitForValue", "waitForAttribute", "waitForNotText", "waitForNotValue", "waitForNotAttribute", "waitForText", "waitForTextPresent", "waitForTextNotPresent", "waitForElementPresent", "waitForEditable", "waitForElementNotPresent", "waitForNotVisible", "waitForTitle", "waitForLocation", "waitForAlert", "waitForConfirmation"],
+    "Scenario_Flow": ["gotoIf", "goto", "label", "close", "pause", "setTimeout", "echo", "setSpeed"],
+    "JS_Execution": ["fireEvent", "runScript", "runScriptAndWait", "getEval"],
+    "Stored_Variables": ["storeTitle", "storeXpathCount", "storeCssCount", "storeValue", "storeText", "storeLocation", "storeExpression", "storeEval", "storeAttribute", "storeElementPresent", "store"],
+    "Custom_ASM_Specific_Commands": ["setPageBreak", "insertPageBreak", "takeScreenshot", "startRecording", "clearRecording", "getDictionary", "stopRecording"]
+  }
+}
+```
+
+---
+
+**Final Execution Rules:**
+
+* Each row in the output HTML must represent **one single executable action**.
+* Do not include commands outside the provided dictionary.
+* If the step logic includes `if`, `else`, `switch`, etc., extract **only the final actionable commands** that would be executed.
+* If multiple actions are found inside loops or branches, create separate `<tr>` rows in the same order as they would be executed.
+* Respect delays/waits only when explicitly coded.
+* If locator is missing, keep the `<td>` empty.
+* Prioritize `sendKeys` over `type` or `typeKeys` when input is detected.
+
