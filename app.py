@@ -41,3 +41,8 @@ For Tier 2, we’ll do the same, giving you a clear picture of how the accuracy 
 
 
 Now, let’s move on to performance insights. For our performance testing, we trigger all use cases in parallel directly from our source systems using an API. This means that all 50 parallel processes run simultaneously, allowing us to achieve significant efficiency. For example, when processing 200 documents, we can complete the task in about 15 minutes. This means that identifying parties from all 50 parallel streams takes roughly 2 minutes, including the Kafka processing.
+
+
+
+
+  We've identified the top 25 most frequently used languages and extracted documents in each language, along with their manually translated versions, which serve as our ground truth. For each document, we’ll upload the original  document and trigger the AI translation via an API, then upload the relevant manually translated version, then compare the AI's output to the manual translation and generate the BLEU score. We have a predefined threshold for each document, will compare with it. If the AI's translation falls below this threshold, we’ll run an evaluation framework which uses OpenAI. This framework checks for repeated text, missing content, and any changes needed. We’ll update the prompts/hyper parameters as necessary and rerun the evaluation until we achieve the desired accuracy. This iterative process ensures higher accuracy and completeness, and we’ll measure overall performance using accuracy, completeness, and correctness metrics
