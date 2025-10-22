@@ -1,6 +1,6 @@
-def compare_tool_calls(expected_tool_calls, actual_tool_calls):
-    from copy import deepcopy
+import json
 
+def compare_tool_calls(expected_tool_calls, actual_tool_calls):
     result = {"comparison_result": {"tools": [], "overall_summary": {}}}
 
     # Group tools by name to handle multiple calls
@@ -15,21 +15,28 @@ def compare_tool_calls(expected_tool_calls, actual_tool_calls):
     expected_tool_names = set(expected_tools_grouped.keys())
     actual_tool_names = set(actual_tools_grouped.keys())
 
-    matched_tool_count = len(expected_tool_names & actual_tool_names)
-    unexpected_tools = actual_tool_names - expected_tool_names
+    # Detect unexpected tool calls
+    unexpected_tools = set()
+    for tool_name, actual_list in actual_tools_grouped.items():
+        expected_count = len(expected_tools_grouped.get(tool_name, []))
+        actual_count = len(actual_list)
+        if actual_count > expected_count:
+            unexpected_tools.add(tool_name)
+
+    matched_tool_count = sum(
+        min(len(expected_tools_grouped.get(t, [])), len(actual_tools_grouped.get(t, [])))
+        for t in expected_tools_grouped
+    )
 
     tools_summary = []
     tool_call_accuracies = []
     intent_accuracies = []
     field_accuracies = []
 
-    # Loop through all expected tools
     for tool_name, expected_tool_list in expected_tools_grouped.items():
         actual_tool_list = actual_tools_grouped.get(tool_name, [])
 
-        # Compare each expected occurrence
         for idx, expected_tool in enumerate(expected_tool_list):
-            # Take corresponding actual tool if exists, else empty
             actual_tool = actual_tool_list[idx] if idx < len(actual_tool_list) else None
 
             tool_summary = {
@@ -46,7 +53,6 @@ def compare_tool_calls(expected_tool_calls, actual_tool_calls):
             }
 
             if not actual_tool:
-                # Tool missing entirely
                 tool_summary["intent_accuracy"] = 0.0
                 tool_summary["average_field_accuracy"] = 0.0
                 tool_summary["passed"] = False
@@ -57,24 +63,30 @@ def compare_tool_calls(expected_tool_calls, actual_tool_calls):
                 continue
 
             intents = ["add", "update", "delete"]
-            intent_acc_list = []
-            field_acc_list = []
 
-            # Detect missing/extra intents
+            # Expected intents are only non-empty ones
             expected_intents_present = [i for i in intents if expected_tool.get("expected_input", {}).get(i)]
             actual_intents_present = [i for i in intents if actual_tool.get("input", {}).get(i)]
 
+            # Missing intents: expected non-empty intents not present in actual
             missing_intents = [i for i in expected_intents_present if i not in actual_intents_present]
+
+            # Extra intents: actual non-empty intents not expected
             extra_intents = [i for i in actual_intents_present if i not in expected_intents_present]
 
             tool_summary["missing_intents"] = missing_intents
             tool_summary["extra_intents"] = extra_intents
             tool_summary["unexpected_intent"] = True if extra_intents else False
 
-            if tool_summary["unexpected_intent"]:
-                tool_summary["passed"] = False
+            # Intent accuracy = proportion of expected intents present in actual
+            if expected_intents_present:
+                tool_summary["intent_accuracy"] = (len(expected_intents_present) - len(missing_intents)) / len(expected_intents_present)
+            else:
+                tool_summary["intent_accuracy"] = 1.0  # no expected intents → full accuracy
 
-            # Compare fields per intent
+            field_acc_list = []
+
+            # Compare fields only for expected intents
             for intent in intents:
                 expected_records = expected_tool.get("expected_input", {}).get(intent, [])
                 actual_records = actual_tool.get("input", {}).get(intent, [])
@@ -85,11 +97,11 @@ def compare_tool_calls(expected_tool_calls, actual_tool_calls):
                 for ridx in range(max_len):
                     expected_record = expected_records[ridx] if ridx < len(expected_records) else {}
                     actual_record = actual_records[ridx] if ridx < len(actual_records) else {}
+
                     field_comparisons = {}
                     correct_fields = 0
                     total_fields = len(expected_record)
 
-                    # Compare only expected fields
                     for field, expected_value in expected_record.items():
                         actual_value = actual_record.get(field)
                         correct = expected_value == actual_value
@@ -105,9 +117,9 @@ def compare_tool_calls(expected_tool_calls, actual_tool_calls):
 
                     unexpected_record = False
                     if ridx >= len(expected_records) and actual_record:
-                        # Extra record in actual
+                        # Extra record in actual → mark unexpected, but don't penalize field accuracy
                         unexpected_record = True
-                        record_field_accuracy = 0.0
+                        record_field_accuracy = 1.0
 
                     intent_records_summary.append({
                         "record_index": ridx,
@@ -118,15 +130,8 @@ def compare_tool_calls(expected_tool_calls, actual_tool_calls):
                         "unexpected_record": unexpected_record
                     })
 
-                    field_acc_list.append(record_field_accuracy)
-
-                # Intent accuracy: consider only expected intents
-                if expected_records:
-                    intent_acc = 1.0 if len(expected_records) == len(actual_records[:len(expected_records)]) else 0.0
-                else:
-                    intent_acc = 1.0
-
-                intent_acc_list.append(intent_acc)
+                    if ridx < len(expected_records):
+                        field_acc_list.append(record_field_accuracy)
 
                 if expected_records:
                     tool_summary["intent_summary"].append({
@@ -134,11 +139,9 @@ def compare_tool_calls(expected_tool_calls, actual_tool_calls):
                         "records": intent_records_summary
                     })
 
-            # Tool-level metrics
-            tool_summary["intent_accuracy"] = min(intent_acc_list) if intent_acc_list else 1.0
             tool_summary["average_field_accuracy"] = sum(field_acc_list)/len(field_acc_list) if field_acc_list else 1.0
 
-            # Strict tool-level pass/fail
+            # Passed = all accuracies 1.0 and no missing/unexpected tool or intent
             tool_summary["passed"] = (
                 tool_summary["tool_call_accuracy"] == 1.0 and
                 tool_summary["intent_accuracy"] == 1.0 and
@@ -154,7 +157,6 @@ def compare_tool_calls(expected_tool_calls, actual_tool_calls):
             intent_accuracies.append(tool_summary["intent_accuracy"])
             field_accuracies.append(tool_summary["average_field_accuracy"])
 
-    # Overall summary
     overall_summary = {
         "expected_tool_count": len(expected_tool_calls),
         "actual_tool_count": len(actual_tool_calls),
@@ -163,14 +165,59 @@ def compare_tool_calls(expected_tool_calls, actual_tool_calls):
         "average_intent_accuracy": sum(intent_accuracies)/len(intent_accuracies) if intent_accuracies else 0.0,
         "average_field_accuracy": sum(field_accuracies)/len(field_accuracies) if field_accuracies else 0.0,
         "final_accuracy": (
-            sum(tool_call_accuracies)/len(tool_call_accuracies) +
-            sum(intent_accuracies)/len(intent_accuracies) +
-            sum(field_accuracies)/len(field_accuracies)
-        ) / 3 if tool_call_accuracies else 0.0,
+            (sum(tool_call_accuracies)/len(tool_call_accuracies) if tool_call_accuracies else 0.0) +
+            (sum(intent_accuracies)/len(intent_accuracies) if intent_accuracies else 0.0) +
+            (sum(field_accuracies)/len(field_accuracies) if field_accuracies else 0.0)
+        ) / 3,
         "passed": all([t["passed"] for t in tools_summary])
     }
 
     result["comparison_result"]["tools"] = tools_summary
     result["comparison_result"]["overall_summary"] = overall_summary
-
     return result
+
+
+# -----------------------------
+# Example usage
+# -----------------------------
+if __name__ == "__main__":
+    expected_tool_calls = [
+        {
+            "tool_name": "ToolA",
+            "expected_input": {
+                "add": [{"field1": "value1", "field2": "value2"}],
+                "update": [],
+                "delete": []
+            }
+        },
+        {
+            "tool_name": "ToolB",
+            "expected_input": {
+                "add": [],
+                "update": [{"fieldX": "123"}, {"fieldQ": "13"}],
+                "delete": []
+            }
+        }
+    ]
+
+    actual_tool_calls = [
+        {
+            "name": "ToolA",
+            "input": {
+                "add": [{"field1": "value1", "field2": "value2"}],
+                "update": [],
+                "delete": []
+            }
+        },
+        {
+            "name": "ToolB",
+            "input": {
+                "add": [],
+                "update": [{"fieldX": "12"}],
+                "delete": []
+            }
+        }
+    ]
+
+    result = compare_tool_calls(expected_tool_calls, actual_tool_calls)
+    print(json.dumps(result, indent=4))
